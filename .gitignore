@@ -1,0 +1,19 @@
+# Llaves: NUNCA subir keypairs a git
+keys/
+*keypair*.json
+id.json
+.env
+.env.*
+!.env.example
+
+# Dependencias y builds
+node_modules/
+target/
+.anchor/
+test-ledger/
+
+# Datos locales de la demo (llaves de estudiantes, códigos QR usados)
+data/*.local.json
+
+# macOS
+.DS_Store
