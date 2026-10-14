@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniPuntos · Estudiante</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<main>
+  <h1>UniPuntos</h1>
+  <p class="sub">Tus puntos por puntualidad y participación. Son tuyos: nadie puede quitártelos.</p>
+
+  <!-- DEMO: en producción el estudiante entra con su cuenta universitaria. -->
+  <div class="tarjeta">
+    <label for="estudiante">Estudiante (demo)</label>
+    <select id="estudiante"></select>
+  </div>
+
+  <div class="tarjeta">
+    <label>Saldo</label>
+    <div class="saldo" id="saldo">…</div>
+    <p class="pequeno" id="wallet"></p>
+  </div>
+
+  <div class="tarjeta oculto" id="tarjeta-qr">
+    <h2>Muestra este código en caja</h2>
+    <div class="qr">
+      <img id="qr-img" alt="Código QR del canje">
+      <p class="codigo-grande" id="qr-codigo"></p>
+      <p class="pequeno" id="qr-detalle"></p>
+    </div>
+    <button class="secundario" id="cerrar-qr">Listo</button>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Catálogo</h2>
+    <ul class="lista" id="catalogo"></ul>
+    <p class="mensaje" id="mensaje"></p>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Historial</h2>
+    <ul class="lista" id="historial"></ul>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let datos, saldo = 0;
+
+  async function api(url, opciones) {
+    const r = await fetch(url, opciones);
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Error');
+    return json;
+  }
+
+  function mostrarMensaje(texto, tipo = '') {
+    $('mensaje').textContent = texto;
+    $('mensaje').className = 'mensaje ' + tipo;
+  }
+
+  async function iniciar() {
+    datos = await api('/api/datos');
+    $('estudiante').innerHTML = datos.estudiantes.map((e) => `<option value="${e.id}">${e.nombre}</option>`).join('');
+    $('estudiante').addEventListener('change', cargarEstudiante);
+    $('cerrar-qr').addEventListener('click', () => { $('tarjeta-qr').classList.add('oculto'); cargarEstudiante(); });
+    await cargarEstudiante();
+  }
+
+  async function cargarEstudiante() {
+    mostrarMensaje('');
+    $('saldo').textContent = '…';
+    try {
+      const info = await api('/api/estudiantes/' + $('estudiante').value);
+      saldo = info.saldo;
+      $('saldo').textContent = info.saldo + ' pts';
+      $('wallet').innerHTML = `Wallet: <a href="${info.explorador}" target="_blank" rel="noopener">${info.wallet.slice(0, 6)}…${info.wallet.slice(-4)}</a>`;
+      pintarCatalogo();
+      pintarHistorial(info.historial);
+    } catch (e) {
+      $('saldo').textContent = '—';
+      mostrarMensaje(e.message, 'error');
+    }
+  }
+
+  function pintarCatalogo() {
+    const nombreComercio = (id) => datos.comercios.find((c) => c.id === id)?.nombre ?? id;
+    $('catalogo').innerHTML = datos.catalogo.map((r) => `
+      <li>
+        <div>${r.nombre}<br><small>${nombreComercio(r.comercio)}</small></div>
+        <button data-id="${r.id}" ${saldo < r.puntos ? 'disabled' : ''}>${r.puntos} pts</button>
+      </li>`).join('');
+    $('catalogo').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => pedirCodigo(b.dataset.id)));
+  }
+
+  function pintarHistorial(historial) {
+    if (!historial.length) {
+      $('historial').innerHTML = '<li><small>Aún no hay movimientos.</small></li>';
+      return;
+    }
+    const nombre = (h) => h.tipo === 'award'
+      ? 'Puntos recibidos'
+      : 'Canje: ' + (datos.catalogo.find((r) => r.id === h.recompensa)?.nombre ?? h.recompensa);
+    $('historial').innerHTML = historial.map((h) => `
+      <li>
+        <div>${nombre(h)}<br><small>${new Date(h.fecha).toLocaleString('es-GT')} · <a href="${h.explorador}" target="_blank" rel="noopener">ver en la cadena</a></small></div>
+        <span class="puntos ${h.tipo === 'award' ? 'pos' : 'neg'}">${h.tipo === 'award' ? '+' : '−'}${h.cantidad}</span>
+      </li>`).join('');
+  }
+
+  async function pedirCodigo(idRecompensa) {
+    mostrarMensaje('');
+    try {
+      const r = await api('/api/codigos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estudiante: $('estudiante').value, recompensa: idRecompensa }),
+      });
+      $('qr-img').src = r.qr;
+      $('qr-codigo').textContent = r.codigo;
+      $('qr-detalle').textContent = `${r.recompensa.nombre} · ${r.recompensa.puntos} pts · válido hasta ${new Date(r.expira).toLocaleTimeString('es-GT')}`;
+      $('tarjeta-qr').classList.remove('oculto');
+      $('tarjeta-qr').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      mostrarMensaje(e.message, 'error');
+    }
+  }
+
+  iniciar().catch((e) => mostrarMensaje(e.message, 'error'));
+</script>
+</body>
+</html>

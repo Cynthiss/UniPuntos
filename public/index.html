@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniPuntos</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<main>
+  <h1>UniPuntos</h1>
+  <p class="sub">Demo del nivel 1 en Solana devnet.</p>
+  <div class="tarjeta">
+    <ul class="lista">
+      <li><a href="estudiante.html">App del estudiante</a><small>saldo, catálogo, QR</small></li>
+      <li><a href="comercio.html">Caja del comercio</a><small>confirmar canjes</small></li>
+    </ul>
+  </div>
+  <div class="tarjeta">
+    <h2>Auditoría pública</h2>
+    <p id="emision" class="pequeno">Consultando la cadena…</p>
+  </div>
+</main>
+<script>
+  fetch('/api/emision').then((r) => r.json()).then((e) => {
+    document.getElementById('emision').innerHTML = e.error
+      ? e.error
+      : `Puntos en circulación: <strong>${e.enCirculacion}</strong>. Cualquiera puede verificarlo en el <a href="${e.explorador}" target="_blank" rel="noopener">explorador</a>.`;
+  });
+</script>
+</body>
+</html>

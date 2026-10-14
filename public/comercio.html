@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UniPuntos · Comercio</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<main>
+  <h1>UniPuntos · Caja</h1>
+  <p class="sub">Escanea o escribe el código del estudiante. No verás su identidad: solo la recompensa.</p>
+
+  <div class="tarjeta">
+    <label for="comercio">Comercio (demo)</label>
+    <select id="comercio"></select>
+  </div>
+
+  <div class="tarjeta">
+    <label for="codigo">Código de canje</label>
+    <div class="fila">
+      <input id="codigo" class="codigo" maxlength="8" autocomplete="off" placeholder="ABCD2345">
+      <button id="buscar">Buscar</button>
+    </div>
+    <!-- Escaneo con cámara: solo si el navegador soporta BarcodeDetector
+         (Chrome en Android, por ejemplo). Si no, se escribe el código. -->
+    <button class="secundario oculto" id="escanear" style="margin-top:8px">Escanear QR</button>
+    <video id="video" class="oculto" playsinline muted></video>
+  </div>
+
+  <div class="tarjeta oculto" id="detalle">
+    <h2 id="detalle-nombre"></h2>
+    <p id="detalle-info" class="pequeno"></p>
+    <button id="confirmar">Confirmar canje</button>
+  </div>
+  <p class="mensaje" id="mensaje"></p>
+
+  <div class="tarjeta">
+    <h2>Canjes registrados</h2>
+    <p class="pequeno">Base para la liquidación mensual con la universidad.</p>
+    <ul class="lista" id="canjes"></ul>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let datos, codigoActual = null;
+
+  async function api(url, opciones) {
+    const r = await fetch(url, opciones);
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Error');
+    return json;
+  }
+
+  function mostrarMensaje(html, tipo = '') {
+    $('mensaje').innerHTML = html;
+    $('mensaje').className = 'mensaje ' + tipo;
+  }
+
+  async function iniciar() {
+    datos = await api('/api/datos');
+    $('comercio').innerHTML = datos.comercios.map((c) => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    $('comercio').addEventListener('change', () => { limpiar(); cargarCanjes(); });
+    $('buscar').addEventListener('click', () => buscar($('codigo').value));
+    $('codigo').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar($('codigo').value); });
+    $('confirmar').addEventListener('click', confirmar);
+    if ('BarcodeDetector' in window) {
+      $('escanear').classList.remove('oculto');
+      $('escanear').addEventListener('click', escanear);
+    }
+    cargarCanjes();
+  }
+
+  function limpiar() {
+    codigoActual = null;
+    $('detalle').classList.add('oculto');
+    mostrarMensaje('');
+  }
+
+  async function buscar(codigo) {
+    limpiar();
+    codigo = codigo.trim().toUpperCase();
+    if (!codigo) return;
+    try {
+      const c = await api('/api/codigos/' + encodeURIComponent(codigo));
+      const deEsteComercio = c.recompensa.comercio === $('comercio').value;
+      $('detalle-nombre').textContent = c.recompensa.nombre;
+      $('detalle-info').textContent = `${c.recompensa.puntos} puntos · estado: ${c.estado}`;
+      $('confirmar').disabled = c.estado !== 'pendiente' || !deEsteComercio;
+      $('detalle').classList.remove('oculto');
+      if (!deEsteComercio) mostrarMensaje('Este código es para otro comercio.', 'error');
+      codigoActual = codigo;
+    } catch (e) {
+      mostrarMensaje(e.message, 'error');
+    }
+  }
+
+  async function confirmar() {
+    $('confirmar').disabled = true;
+    mostrarMensaje('Quemando puntos en la cadena…');
+    try {
+      const r = await api(`/api/codigos/${codigoActual}/confirmar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comercio: $('comercio').value }),
+      });
+      $('detalle').classList.add('oculto');
+      $('codigo').value = '';
+      mostrarMensaje(`Canje confirmado: ${r.recompensa.nombre}. <a href="${r.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, 'ok');
+      cargarCanjes();
+    } catch (e) {
+      $('confirmar').disabled = false;
+      mostrarMensaje(e.message, 'error');
+    }
+  }
+
+  async function cargarCanjes() {
+    const { canjes } = await api(`/api/comercios/${$('comercio').value}/canjes`);
+    const nombre = (id) => datos.catalogo.find((r) => r.id === id)?.nombre ?? id;
+    $('canjes').innerHTML = canjes.length
+      ? canjes.slice().reverse().map((c) => `
+          <li>
+            <div>${nombre(c.recompensa)}<br><small>${new Date(c.fecha).toLocaleString('es-GT')} · <a href="${c.explorador}" target="_blank" rel="noopener">ver</a></small></div>
+            <span class="puntos">${c.cantidad} pts</span>
+          </li>`).join('')
+      : '<li><small>Sin canjes todavía.</small></li>';
+  }
+
+  // Escaneo del QR con la cámara (si el navegador lo permite).
+  async function escanear() {
+    const video = $('video');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      video.classList.remove('oculto');
+      await video.play();
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const detener = () => { stream.getTracks().forEach((t) => t.stop()); video.classList.add('oculto'); };
+      const buscarCuadro = async () => {
+        const [hallado] = await detector.detect(video);
+        if (hallado) {
+          detener();
+          $('codigo').value = hallado.rawValue;
+          buscar(hallado.rawValue);
+        } else {
+          requestAnimationFrame(buscarCuadro);
+        }
+      };
+      buscarCuadro();
+    } catch (e) {
+      mostrarMensaje('No se pudo abrir la cámara: ' + e.message, 'error');
+    }
+  }
+
+  iniciar().catch((e) => mostrarMensaje(e.message, 'error'));
+</script>
+</body>
+</html>

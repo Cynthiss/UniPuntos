@@ -1,0 +1,23 @@
+{
+  "_nota": "Datos de prueba para la demo. Los nombres son ficticios.",
+  "estudiantes": [
+    { "id": "ana", "nombre": "Ana López", "carnet": "20230001" },
+    { "id": "bruno", "nombre": "Bruno Méndez", "carnet": "20230002" },
+    { "id": "carla", "nombre": "Carla Ruiz", "carnet": "20230003" }
+  ],
+  "comercios": [
+    { "id": "u-servicios", "nombre": "Servicios UFM (parqueo y exámenes)", "tipo": "universidad" },
+    { "id": "cafe-campus", "nombre": "Café del Campus", "tipo": "comercio" }
+  ],
+  "catalogo": [
+    { "id": "parqueo-dia", "nombre": "Parqueo por un día", "puntos": 30, "comercio": "u-servicios", "financia": "universidad" },
+    { "id": "examen-extra", "nombre": "Examen extracurricular", "puntos": 120, "comercio": "u-servicios", "financia": "universidad" },
+    { "id": "cafe-2x1", "nombre": "Café 2x1", "puntos": 20, "comercio": "cafe-campus", "financia": "comercio" },
+    { "id": "descuento-q10", "nombre": "Q10 de descuento en compras desde Q30", "puntos": 40, "comercio": "cafe-campus", "financia": "universidad" }
+  ],
+  "conductas": [
+    { "id": "pago-puntual", "nombre": "Pago de mensualidad a tiempo", "puntos": 50 },
+    { "id": "tutoria", "nombre": "Asistencia a tutoría", "puntos": 15 },
+    { "id": "voluntariado", "nombre": "Voluntariado", "puntos": 25 }
+  ]
+}
