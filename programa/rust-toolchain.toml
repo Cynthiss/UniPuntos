@@ -1,0 +1,5 @@
+[toolchain]
+# Rust del host (pruebas e IDL). El programa on-chain usa el compilador de las platform tools.
+# LiteSVM 0.17 requiere rustc >= 1.97.1.
+channel = "stable"
+profile = "minimal"
