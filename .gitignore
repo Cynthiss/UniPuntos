@@ -17,3 +17,6 @@ data/*.local.json
 
 # macOS
 .DS_Store
+
+# Nivel 3: artefactos de la ceremonia (se regeneran con npm run zk:setup)
+zk/build/

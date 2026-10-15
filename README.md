@@ -7,6 +7,7 @@ Programa de recompensas universitario sobre **Solana (devnet)**. La universidad 
 Este repositorio contiene:
 - **Nivel 1** (raíz): el mínimo funcional de punta a punta, con scripts en Node y una app web.
 - **Nivel 2** (`programa/`): un programa Anchor que hace cumplir las reglas en la cadena.
+- **Nivel 3** (`zk/`): canje privado con una prueba de conocimiento cero.
 
 ## Qué garantiza el código
 
@@ -43,10 +44,15 @@ public/
 data/
   seed.json       Datos de prueba: 3 estudiantes, 2 comercios, 4 recompensas, 3 conductas
   *.local.json    Generados al usar la demo (mint, motivos, historial por nivel, códigos). No se suben.
-keys/             Llaves (universidad, mint, estudiantes, comercios). NUNCA se suben a git.
+keys/             Llaves (universidad, mint, estudiantes, comercios) y secretos ZK. NUNCA se suben a git.
 programa/         Nivel 2: workspace Anchor
   programs/unipuntos/src/          Programa (cuentas, instrucciones, errores)
   programs/unipuntos/tests/        Pruebas con LiteSVM
+zk/               Nivel 3: canje privado con conocimiento cero
+  circuito/canje_privado.circom    Circuito (pertenencia al árbol + nullifier)
+  setup.sh        Compila el circuito y genera las llaves Groth16
+  zk.js           Árbol de Merkle, prueba del estudiante y verificación del comercio
+  cli.js, demo.js Comandos y recorrido completo con ataques
 ```
 
 ## Requisitos
@@ -55,7 +61,8 @@ Probado en macOS (Apple Silicon) con:
 
 - Node.js 24
 - Solana CLI 4.3 (Agave) y `spl-token` 5.6
-- Rust 1.99 y Anchor 1.2.1 (necesarios para el nivel 2, no para el nivel 1)
+- Rust 1.99 y Anchor 1.2.1 (nivel 2)
+- circom 2.2.3 (nivel 3)
 
 ## Cómo correrlo
 
@@ -236,6 +243,53 @@ solana-test-validator --reset --bpf-program GKpeeXMXGGuSd3CGKsnkyVn85wGoJ56nxoex
 SOLANA_RPC_URL=http://127.0.0.1:8899 UNIPUNTOS_NIVEL=2 npm run inicializar-programa
 ```
 
-## Próximos niveles
+## Nivel 3: canje privado con conocimiento cero (`zk/`)
 
-- **Nivel 3:** canje privado con conocimiento cero (circom + snarkjs). El estudiante demuestra que pagó puntual sin revelar quién es.
+**Caso:** Café 2x1 solo para estudiantes que pagaron puntual este mes, **sin que el comercio sepa quién es** el estudiante. Es una demo aislada: no depende de la cadena ni de la app.
+
+### Quién sabe qué
+
+| Actor | Sabe | No sabe |
+|---|---|---|
+| Universidad | quién pagó puntual; publica un árbol de Merkle con los compromisos `Poseidon(secreto)` de los elegibles | cuál de los elegibles canjeó |
+| Estudiante | su `secreto` (en producción, solo en su celular) | — |
+| Comercio | que la prueba es válida, de esta promo y no usada antes | nombre, carnet, compromiso ni posición en el árbol |
+
+### Cómo funciona
+
+1. **La U publica la promo del mes:** arma un árbol de Merkle (Poseidon, profundidad 10, hasta 1,024 estudiantes) con los compromisos de quienes pagaron puntual y publica la raíz y la lista de compromisos. Los ordena por valor para que la posición no delate a nadie. No hay nombres.
+2. **El estudiante genera una prueba Groth16** (~1 s) de que conoce un secreto cuyo compromiso está en el árbol. La prueba ocupa ~1,000 caracteres y cabe en un QR.
+3. **El comercio verifica** (~20 ms) con la llave de verificación. Las entradas públicas son solo `raiz`, `nullifierHash` y `promoId`.
+4. **Doble canje:** `nullifierHash = Poseidon(secreto, promoId)` siempre es igual para el mismo estudiante y la misma promo, así que el verificador guarda los usados. No sirve para identificar al estudiante y no se puede relacionar entre promos distintas.
+
+Circuito: [`zk/circuito/canje_privado.circom`](zk/circuito/canje_privado.circom), estilo Semaphore con `circomlib`.
+
+### Cómo correrlo
+
+Requiere `circom` 2.2 (se compila desde https://github.com/iden3/circom con `cargo install --path circom`). `snarkjs` y `circomlib` se instalan con `npm install`.
+
+```bash
+npm run zk:setup     # compila el circuito y genera las llaves (~1 min)
+npm run zk:demo      # recorrido completo con los ataques
+```
+
+O paso a paso:
+
+```bash
+npm run zk -- publicar 2026-10                       # la U publica el árbol
+npm run zk -- probar ana 2026-10                     # Ana genera su prueba
+npm run zk -- verificar data/zk-prueba-ana.local.json   # el comercio verifica
+```
+
+La demo muestra que se rechaza:
+- el **doble canje** (mismo estudiante, misma promo, aunque genere una prueba nueva);
+- a un **estudiante no elegible** que usa el camino de otra persona: el circuito no genera la prueba (falla `arbol.raiz === raiz`);
+- una **prueba alterada** (la verificación Groth16 falla);
+- una **prueba de otro mes**, aunque el árbol sea idéntico (el `promoId` no coincide; si se cambia, la prueba deja de ser válida).
+
+### Limitaciones de la demo
+
+- **Ceremonia de un solo participante.** `zk/setup.sh` genera las llaves localmente, y quien conozca esa aleatoriedad podría falsificar pruebas. En producción se usaría la ceremonia pública *Perpetual Powers of Tau* para la fase 1 y varios participantes independientes en la fase 2 (basta con que uno sea honesto).
+- **Custodia de secretos.** Los secretos se guardan en `keys/zk/`. En producción se generan en el celular del estudiante y la U solo recibe el compromiso.
+- **Verificación en el backend.** Los nullifiers se guardan en un archivo. Como mejora, la verificación y el registro de nullifiers podrían ir dentro de Solana con `groth16-solana`.
+- **Anonimato según el tamaño del grupo.** Con 2 elegibles, el comercio sabe que fue uno de dos. El anonimato crece con el número de estudiantes en el árbol.
