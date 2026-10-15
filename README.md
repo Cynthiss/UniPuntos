@@ -9,6 +9,20 @@ Este repositorio contiene:
 - **Nivel 2** (`programa/`): un programa Anchor que hace cumplir las reglas en la cadena.
 - **Nivel 3** (`zk/`): canje privado con una prueba de conocimiento cero.
 
+## Desplegado en devnet
+
+Cualquiera puede revisar estas cuentas en el explorador de Solana (red devnet):
+
+| Qué | Dirección |
+|---|---|
+| Universidad (autoridad y fee payer) | [`Dwd21gVT7ckW7AME7gH2qsSxh4eZatvByhFTBdyWnzaA`](https://explorer.solana.com/address/Dwd21gVT7ckW7AME7gH2qsSxh4eZatvByhFTBdyWnzaA?cluster=devnet) |
+| Nivel 1: mint de puntos | [`DaMDDpjRecY3W2RECvFaesTPhT7uwaGbexx499LAhcMu`](https://explorer.solana.com/address/DaMDDpjRecY3W2RECvFaesTPhT7uwaGbexx499LAhcMu?cluster=devnet) |
+| Nivel 2: programa | [`GKpeeXMXGGuSd3CGKsnkyVn85wGoJ56nxoexrtpRZKHb`](https://explorer.solana.com/address/GKpeeXMXGGuSd3CGKsnkyVn85wGoJ56nxoexrtpRZKHb?cluster=devnet) |
+| Nivel 2: `Config` (reglas y totales) | [`DzXapGM9tG5PYFKF8cyTanRFkaekMcSh4tBv2EyuBA49`](https://explorer.solana.com/address/DzXapGM9tG5PYFKF8cyTanRFkaekMcSh4tBv2EyuBA49?cluster=devnet) |
+| Nivel 2: mint de puntos (autoridad = programa) | [`5PSiJxV1Ejzmz49PJYHZTxYE9LYvAQPm7XxbJBN3L2kZ`](https://explorer.solana.com/address/5PSiJxV1Ejzmz49PJYHZTxYE9LYvAQPm7XxbJBN3L2kZ?cluster=devnet) |
+
+El IDL del programa también está publicado en la cadena, así que el explorador puede decodificar sus instrucciones y cuentas.
+
 ## Qué garantiza el código
 
 | Garantía | Cómo se logra |
