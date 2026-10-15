@@ -25,7 +25,10 @@
   fetch('/api/emision').then((r) => r.json()).then((e) => {
     document.getElementById('emision').innerHTML = e.error
       ? e.error
-      : `Puntos en circulación: <strong>${e.enCirculacion}</strong>. Cualquiera puede verificarlo en el <a href="${e.explorador}" target="_blank" rel="noopener">explorador</a>.`;
+      : `Nivel ${e.nivel}. Puntos en circulación: <strong>${e.enCirculacion}</strong>. Cualquiera puede verificarlo en el <a href="${e.explorador}" target="_blank" rel="noopener">explorador</a>.`
+        + (e.nivel === 2
+          ? `<br>Reglas del programa: máximo ${e.topeEstudiante} puntos por estudiante y ${e.presupuestoPeriodo} en total por período (${e.otorgadoEnPeriodo} usados).`
+          : '');
   });
 </script>
 </body>

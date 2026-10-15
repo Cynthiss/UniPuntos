@@ -1,0 +1,1057 @@
+{
+  "address": "GKpeeXMXGGuSd3CGKsnkyVn85wGoJ56nxoexrtpRZKHb",
+  "metadata": {
+    "name": "unipuntos",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "UniPuntos: reglas de emisión y canje de puntos (nivel 2)"
+  },
+  "instructions": [
+    {
+      "name": "award_points",
+      "discriminator": [
+        7,
+        146,
+        136,
+        192,
+        102,
+        71,
+        93,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "La universidad: firma y paga las cuentas nuevas."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "student"
+        },
+        {
+          "name": "student_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  117,
+                  100,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "student"
+              }
+            ]
+          }
+        },
+        {
+          "name": "student_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "student"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "reason_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "La universidad: queda como autoridad y paga la creación de las cuentas."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "Al ser una PDA de este programa, su dirección es única y conocida."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "cap_per_student",
+          "type": "u64"
+        },
+        {
+          "name": "budget_per_period",
+          "type": "u64"
+        },
+        {
+          "name": "period_seconds",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "redeem",
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Paga la comisión y la cuenta `Redemption` (en la práctica, la universidad)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "student",
+          "docs": [
+            "El estudiante DEBE firmar: es la única forma de quemar sus puntos."
+          ],
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "student_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  117,
+                  100,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "student"
+              }
+            ]
+          }
+        },
+        {
+          "name": "student_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "student"
+              },
+              {
+                "kind": "account",
+                "path": "token_program"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.wallet",
+                "account": "Merchant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "redemption",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  100,
+                  101,
+                  109,
+                  112,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "student"
+              },
+              {
+                "kind": "account",
+                "path": "student_state.redemptions",
+                "account": "StudentState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "reward_id",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "register_merchant",
+      "discriminator": [
+        238,
+        245,
+        77,
+        132,
+        161,
+        88,
+        216,
+        248
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant_wallet"
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "set_merchant_active",
+      "discriminator": [
+        135,
+        200,
+        111,
+        155,
+        7,
+        90,
+        21,
+        169
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "merchant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  99,
+                  104,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "merchant.wallet",
+                "account": "Merchant"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "active",
+          "type": "bool"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "Merchant",
+      "discriminator": [
+        71,
+        235,
+        30,
+        40,
+        231,
+        21,
+        32,
+        64
+      ]
+    },
+    {
+      "name": "Redemption",
+      "discriminator": [
+        112,
+        75,
+        232,
+        189,
+        22,
+        114,
+        156,
+        203
+      ]
+    },
+    {
+      "name": "StudentState",
+      "discriminator": [
+        154,
+        83,
+        103,
+        195,
+        252,
+        151,
+        213,
+        233
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "MerchantUpdated",
+      "discriminator": [
+        45,
+        173,
+        249,
+        151,
+        20,
+        56,
+        193,
+        252
+      ]
+    },
+    {
+      "name": "PointsAwarded",
+      "discriminator": [
+        201,
+        95,
+        152,
+        50,
+        215,
+        83,
+        188,
+        38
+      ]
+    },
+    {
+      "name": "PointsRedeemed",
+      "discriminator": [
+        57,
+        161,
+        97,
+        67,
+        102,
+        120,
+        85,
+        147
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Solo la autoridad de la universidad puede hacer esto"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidAmount",
+      "msg": "La cantidad debe ser mayor que 0"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidPeriod",
+      "msg": "La duración del período debe ser mayor que 0"
+    },
+    {
+      "code": 6003,
+      "name": "StudentCapExceeded",
+      "msg": "El estudiante superaría el tope de puntos de este período"
+    },
+    {
+      "code": 6004,
+      "name": "BudgetExceeded",
+      "msg": "Se superaría el presupuesto de puntos de este período"
+    },
+    {
+      "code": 6005,
+      "name": "MerchantInactive",
+      "msg": "El comercio no está activo"
+    },
+    {
+      "code": 6006,
+      "name": "TextTooLong",
+      "msg": "El texto supera el largo máximo permitido"
+    },
+    {
+      "code": 6007,
+      "name": "Overflow",
+      "msg": "Desbordamiento aritmético"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "docs": [
+        "Configuración global. Es también la autoridad del mint (PDA), así que",
+        "la única forma de emitir puntos es pasar por `award_points` y sus reglas."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Llave de la universidad: la única que puede otorgar puntos y registrar comercios."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Mint de puntos (Token-2022, NonTransferable, 0 decimales)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "cap_per_student",
+            "docs": [
+              "Tope de puntos que un estudiante puede recibir por período."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "budget_per_period",
+            "docs": [
+              "Presupuesto total de puntos que se pueden emitir por período (todos los estudiantes)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "period_seconds",
+            "docs": [
+              "Duración del período en segundos. Fija desde `initialize`: la U no puede",
+              "\"adelantar\" períodos para reiniciar los topes."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "budget_period_id",
+            "docs": [
+              "Período al que corresponde `awarded_in_period`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "awarded_in_period",
+            "docs": [
+              "Puntos emitidos en el período `budget_period_id`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_awarded",
+            "docs": [
+              "Totales históricos (auditoría)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_redeemed",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "mint_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Merchant",
+      "docs": [
+        "Comercio registrado por la universidad."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "wallet",
+            "docs": [
+              "Wallet del comercio (identifica al comercio; no necesita firmar canjes)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "name",
+            "type": "string"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          },
+          {
+            "name": "total_redeemed",
+            "docs": [
+              "Puntos canjeados en este comercio (base para la liquidación)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerchantUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PointsAwarded",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "student",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "reason_hash",
+            "docs": [
+              "sha256 del motivo; el motivo real queda fuera de la cadena."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "period",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PointsRedeemed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "student",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_id",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "redemption",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redemption",
+      "docs": [
+        "Registro de un canje, para la liquidación mensual con el comercio."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "student",
+            "type": "pubkey"
+          },
+          {
+            "name": "merchant",
+            "docs": [
+              "Wallet del comercio."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reward_id",
+            "type": "string"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StudentState",
+      "docs": [
+        "Estado de cada estudiante (uno por wallet)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "student",
+            "type": "pubkey"
+          },
+          {
+            "name": "period_id",
+            "docs": [
+              "Período al que corresponde `earned_in_period`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "earned_in_period",
+            "type": "u64"
+          },
+          {
+            "name": "redemptions",
+            "docs": [
+              "Número de canjes hechos; se usa como semilla de cada `Redemption`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "CONFIG_SEED",
+      "type": "bytes",
+      "value": "[99, 111, 110, 102, 105, 103]"
+    },
+    {
+      "name": "MERCHANT_SEED",
+      "type": "bytes",
+      "value": "[109, 101, 114, 99, 104, 97, 110, 116]"
+    },
+    {
+      "name": "MINT_SEED",
+      "type": "bytes",
+      "value": "[109, 105, 110, 116]"
+    },
+    {
+      "name": "REDEMPTION_SEED",
+      "type": "bytes",
+      "value": "[114, 101, 100, 101, 109, 112, 116, 105, 111, 110]"
+    },
+    {
+      "name": "STUDENT_SEED",
+      "type": "bytes",
+      "value": "[115, 116, 117, 100, 101, 110, 116]"
+    }
+  ]
+}

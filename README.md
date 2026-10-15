@@ -24,20 +24,26 @@ Este repositorio contiene:
 
 ```
 scripts/
-  crear-mint.sh   Crea el mint Token-2022 no transferible (usa la CLI spl-token)
-  award.js        La universidad otorga puntos a un estudiante
-  redeem.js       El estudiante quema puntos para canjear una recompensa
-  balance.js      Saldos y emisión total, leídos de la cadena
+  crear-mint.sh             Nivel 1: crea el mint Token-2022 no transferible (CLI spl-token)
+  inicializar-programa.js   Nivel 2: inicializa el programa y registra los comercios
+  award.js                  La universidad otorga puntos a un estudiante
+  redeem.js                 El estudiante quema puntos para canjear una recompensa
+  balance.js                Saldos y emisión total, leídos de la cadena
 src/
-  puntos.js       Lógica central (la usan los scripts y el servidor)
+  puntos.js       Elige el nivel según UNIPUNTOS_NIVEL (lo usan los scripts y el servidor)
+  comun.js        Llaves, datos de prueba, hash del motivo e historial
+  nivel1.js       Nivel 1: la U emite directo con su llave
+  nivel2.js       Nivel 2: todo pasa por el programa Anchor
   server.js       Backend web: API y códigos QR de un solo uso
+idl/
+  unipuntos.json  Interfaz del programa (la genera anchor build; se copia con npm run idl)
 public/
   estudiante.html Saldo, historial, catálogo y QR (adaptable al celular)
   comercio.html   Caja: ingresa o escanea el código y confirma el canje
 data/
   seed.json       Datos de prueba: 3 estudiantes, 2 comercios, 4 recompensas, 3 conductas
-  *.local.json    Generados al usar la demo (mint, motivos, historial, códigos). No se suben.
-keys/             Llaves (universidad, mint, estudiantes). NUNCA se suben a git.
+  *.local.json    Generados al usar la demo (mint, motivos, historial por nivel, códigos). No se suben.
+keys/             Llaves (universidad, mint, estudiantes, comercios). NUNCA se suben a git.
 programa/         Nivel 2: workspace Anchor
   programs/unipuntos/src/          Programa (cuentas, instrucciones, errores)
   programs/unipuntos/tests/        Pruebas con LiteSVM
@@ -192,16 +198,43 @@ Notas de la configuración:
 - `programa/rust-toolchain.toml` usa Rust `stable` para el host (pruebas e IDL), porque LiteSVM 0.17 pide rustc 1.97.1 o superior. El programa on-chain se compila con el rustc de las platform tools de Solana.
 - La llave del programa (`target/deploy/unipuntos-keypair.json`) no se sube a git. En un clon nuevo, `anchor keys sync` genera otra y actualiza el `declare_id!`.
 
-### Desplegar en devnet (pendiente)
+### Usar el nivel 2 con los scripts y la app web
 
-Con SOL en la cuenta de la universidad (desplegar cuesta ~2 SOL de devnet):
+Los scripts y la app son los mismos de los dos niveles. La variable `UNIPUNTOS_NIVEL` decide si se emite directo con la llave de la U (`1`, por defecto) o a través del programa (`2`). Se puede dejar fija en un archivo `.env` (ver `.env.example`).
+
+1. Desplegar el programa (con SOL en la cuenta de la universidad; desplegar cuesta ~2 SOL de devnet):
+
+   ```bash
+   cd programa
+   anchor build && anchor deploy --provider.cluster devnet
+   cd .. && npm run idl
+   ```
+
+2. Inicializarlo una sola vez. Esto fija las reglas (100 puntos por estudiante y 10,000 en total por período de 30 días; se cambian en `scripts/inicializar-programa.js` **antes** de inicializar) y registra los comercios:
+
+   ```bash
+   UNIPUNTOS_NIVEL=2 npm run inicializar-programa
+   ```
+
+3. Usarlo igual que el nivel 1:
+
+   ```bash
+   UNIPUNTOS_NIVEL=2 npm run award -- ana pago-puntual
+   UNIPUNTOS_NIVEL=2 npm run balance
+   UNIPUNTOS_NIVEL=2 npm start
+   ```
+
+Diferencias visibles en el nivel 2:
+- Si un premio supera un tope, el programa lo rechaza: *"El estudiante superaría el tope de puntos de este período"*.
+- `balance` y la página de inicio muestran las reglas y los totales que guarda el programa.
+- La caja del comercio lista los canjes leyendo las cuentas `Redemption` de la cadena, no un archivo del backend.
+
+Para probarlo en un validador local, se carga el programa al arrancarlo:
 
 ```bash
-cd programa
-anchor deploy --provider.cluster devnet
+solana-test-validator --reset --bpf-program GKpeeXMXGGuSd3CGKsnkyVn85wGoJ56nxoexrtpRZKHb programa/target/deploy/unipuntos.so
+SOLANA_RPC_URL=http://127.0.0.1:8899 UNIPUNTOS_NIVEL=2 npm run inicializar-programa
 ```
-
-Falta conectar los scripts y la app web del nivel 1 a este programa, en lugar de emitir directamente con la llave de la U.
 
 ## Próximos niveles
 

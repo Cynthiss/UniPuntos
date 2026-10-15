@@ -22,8 +22,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import QRCode from 'qrcode';
 import {
-  RAIZ, seed, canjearPuntos, consultarSaldo, consultarEmision,
-  historialDe, canjesRegistrados, llaveEstudiante, enlaceExplorador,
+  RAIZ, NIVEL, seed, canjearPuntos, consultarSaldo, consultarEmision,
+  historialDe, canjesDeComercio, llaveEstudiante, enlaceExplorador,
 } from './puntos.js';
 
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -72,7 +72,7 @@ app.get('/api/datos', (_req, res) => {
 app.get('/api/emision', async (_req, res, next) => {
   try {
     const emision = await consultarEmision();
-    res.json({ ...emision, explorador: enlaceExplorador(emision.mint, 'address') });
+    res.json({ ...emision, nivel: NIVEL, explorador: enlaceExplorador(emision.mint, 'address') });
   } catch (e) { next(e); }
 });
 
@@ -81,8 +81,7 @@ app.get('/api/estudiantes/:id', async (req, res, next) => {
   try {
     const wallet = llaveEstudiante(req.params.id).publicKey.toBase58();
     const saldo = await consultarSaldo(req.params.id);
-    const historial = historialDe(req.params.id).map((h) => ({ ...h, explorador: enlaceExplorador(h.firma) }));
-    res.json({ saldo, wallet, explorador: enlaceExplorador(wallet, 'address'), historial });
+    res.json({ saldo, wallet, explorador: enlaceExplorador(wallet, 'address'), historial: historialDe(req.params.id) });
   } catch (e) { next(e); }
 });
 
@@ -153,11 +152,11 @@ app.post('/api/codigos/:codigo/confirmar', async (req, res, next) => {
 });
 
 // Canjes de un comercio (base para la liquidación mensual en quetzales).
-app.get('/api/comercios/:id/canjes', (req, res) => {
-  const canjes = canjesRegistrados()
-    .filter((h) => h.comercio === req.params.id)
-    .map(({ recompensa, cantidad, fecha, firma }) => ({ recompensa, cantidad, fecha, explorador: enlaceExplorador(firma) }));
-  res.json({ canjes });
+// En el nivel 2 se leen de las cuentas `Redemption` en la cadena.
+app.get('/api/comercios/:id/canjes', async (req, res, next) => {
+  try {
+    res.json({ canjes: await canjesDeComercio(req.params.id) });
+  } catch (e) { next(e); }
 });
 
 // Errores: se responde con un mensaje legible.
@@ -167,7 +166,7 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PUERTO, () => {
-  console.log(`UniPuntos corriendo en http://localhost:${PUERTO}`);
+  console.log(`UniPuntos (nivel ${NIVEL}) corriendo en http://localhost:${PUERTO}`);
   console.log(`  Estudiante: http://localhost:${PUERTO}/estudiante.html`);
   console.log(`  Comercio:   http://localhost:${PUERTO}/comercio.html`);
 });

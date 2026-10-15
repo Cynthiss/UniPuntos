@@ -4,10 +4,12 @@
   "description": "UniPuntos - programa de recompensas universitario en Solana (devnet)",
   "scripts": {
     "crear-mint": "bash scripts/crear-mint.sh",
-    "award": "node --env-file-if-exists=.env scripts/award.js",
-    "redeem": "node --env-file-if-exists=.env scripts/redeem.js",
-    "balance": "node --env-file-if-exists=.env scripts/balance.js",
-    "start": "node --env-file-if-exists=.env src/server.js"
+    "award": "node scripts/award.js",
+    "redeem": "node scripts/redeem.js",
+    "balance": "node scripts/balance.js",
+    "start": "node src/server.js",
+    "inicializar-programa": "node scripts/inicializar-programa.js",
+    "idl": "cp programa/target/idl/unipuntos.json idl/unipuntos.json"
   },
   "repository": {
     "type": "git",
@@ -23,6 +25,7 @@
   "homepage": "https://github.com/Cynthiss/UniPuntos#readme",
   "private": "true",
   "dependencies": {
+    "@anchor-lang/core": "^1.2.1",
     "@solana/spl-token": "^0.4.15",
     "@solana/web3.js": "^1.99.0",
     "express": "^5.3.0",
