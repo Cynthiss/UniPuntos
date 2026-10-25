@@ -2,133 +2,224 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UniPuntos · Estudiante</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mis puntos · UniPuntos</title>
+  <meta name="theme-color" content="#1d5c47">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
   <link rel="stylesheet" href="estilos.css">
 </head>
-<body>
+<body data-pagina="estudiante">
 <main>
-  <h1>UniPuntos</h1>
-  <p class="sub">Tus puntos por puntualidad y participación. Son tuyos: nadie puede quitártelos.</p>
-
-  <!-- DEMO: en producción el estudiante entra con su cuenta universitaria. -->
-  <div class="tarjeta">
-    <label for="estudiante">Estudiante (demo)</label>
-    <select id="estudiante"></select>
-  </div>
-
-  <div class="tarjeta">
-    <label>Saldo</label>
-    <div class="saldo" id="saldo">…</div>
-    <p class="pequeno" id="wallet"></p>
-  </div>
-
-  <div class="tarjeta oculto" id="tarjeta-qr">
-    <h2>Muestra este código en caja</h2>
-    <div class="qr">
-      <img id="qr-img" alt="Código QR del canje">
-      <p class="codigo-grande" id="qr-codigo"></p>
-      <p class="pequeno" id="qr-detalle"></p>
+  <div class="encabezado fila-entre">
+    <div>
+      <small>Hola,</small>
+      <h1 id="saludo">…</h1>
     </div>
-    <button class="secundario" id="cerrar-qr">Listo</button>
+    <!-- DEMO: en producción el estudiante entra con su cuenta universitaria. -->
+    <select id="estudiante" class="selector" aria-label="Cambiar de estudiante (demo)"></select>
   </div>
 
-  <div class="tarjeta">
-    <h2>Catálogo</h2>
-    <ul class="lista" id="catalogo"></ul>
-    <p class="mensaje" id="mensaje"></p>
-  </div>
+  <div class="dos-columnas">
+    <div>
+      <section class="saldo">
+        <span class="etiqueta">Saldo disponible</span>
+        <div class="monto num" id="saldo">—<span>pts</span></div>
+        <a id="wallet" target="_blank" rel="noopener"></a>
+        <div class="pie">
+          <span class="insignia">🔒&nbsp; No transferibles</span>
+          <span class="insignia">✋&nbsp; Solo tú los gastas</span>
+        </div>
+      </section>
 
-  <div class="tarjeta">
-    <h2>Historial</h2>
-    <ul class="lista" id="historial"></ul>
+      <section class="seccion">
+        <div class="fila-entre" style="margin-bottom:12px">
+          <h2>Recompensas</h2>
+          <small id="disponibles"></small>
+        </div>
+        <div class="rejilla rejilla-2" id="catalogo"></div>
+      </section>
+    </div>
+
+    <section class="seccion" style="margin-top:28px">
+      <h2 style="margin-bottom:12px">Movimientos</h2>
+      <div class="tarjeta"><ul class="lista" id="historial"></ul></div>
+    </section>
   </div>
 </main>
 
+<!-- Hoja con el código QR de un solo uso -->
+<div class="fondo-modal oculto" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+  <div class="hoja">
+    <div class="asa"></div>
+    <div id="modal-espera">
+      <small>Muestra este código en caja</small>
+      <h2 id="modal-titulo" style="margin-top:4px"></h2>
+      <div class="qr"><img id="qr-img" alt="Código QR del canje"></div>
+      <div class="codigo-grande" id="qr-codigo"></div>
+      <small id="qr-puntos"></small><br>
+      <span class="estado-espera"><span class="pulso"></span><span id="qr-estado">Esperando a la caja · vence en 10:00</span></span>
+      <button class="boton secundario ancho" id="cancelar">Cerrar</button>
+    </div>
+    <div id="modal-listo" class="oculto">
+      <div class="exito">✓</div>
+      <h2>¡Canje confirmado!</h2>
+      <p class="suave" id="listo-detalle"></p>
+      <button class="boton ancho" id="listo">Listo</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
-  let datos, saldo = 0;
-
-  async function api(url, opciones) {
-    const r = await fetch(url, opciones);
-    const json = await r.json();
-    if (!r.ok) throw new Error(json.error || 'Error');
-    return json;
-  }
-
-  function mostrarMensaje(texto, tipo = '') {
-    $('mensaje').textContent = texto;
-    $('mensaje').className = 'mensaje ' + tipo;
-  }
+  let datos, saldo = 0, espera = null;
 
   async function iniciar() {
-    datos = await api('/api/datos');
-    $('estudiante').innerHTML = datos.estudiantes.map((e) => `<option value="${e.id}">${e.nombre}</option>`).join('');
-    $('estudiante').addEventListener('change', cargarEstudiante);
-    $('cerrar-qr').addEventListener('click', () => { $('tarjeta-qr').classList.add('oculto'); cargarEstudiante(); });
-    await cargarEstudiante();
+    datos = await UP.api('/api/datos');
+    const recordado = (() => { try { return localStorage.getItem('up-estudiante'); } catch { return null; } })();
+    $('estudiante').innerHTML = datos.estudiantes
+      .map((e) => `<option value="${e.id}" ${e.id === recordado ? 'selected' : ''}>${UP.esc(e.nombre)}</option>`).join('');
+    $('estudiante').addEventListener('change', () => {
+      try { localStorage.setItem('up-estudiante', $('estudiante').value); } catch {}
+      cargar();
+    });
+    $('cancelar').addEventListener('click', cerrarModal);
+    $('listo').addEventListener('click', cerrarModal);
+    $('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') cerrarModal(); });
+    await cargar();
   }
 
-  async function cargarEstudiante() {
-    mostrarMensaje('');
-    $('saldo').textContent = '…';
+  const nombreEstudiante = () => datos.estudiantes.find((e) => e.id === $('estudiante').value).nombre;
+  const nombreComercio = (id) => datos.comercios.find((c) => c.id === id)?.nombre ?? id;
+  const recompensa = (id) => datos.catalogo.find((r) => r.id === id);
+
+  function esqueletos() {
+    $('saldo').innerHTML = '<span class="esqueleto" style="display:inline-block;width:120px;height:44px"></span>';
+    $('catalogo').innerHTML = Array(4).fill('<div class="tarjeta"><div class="esqueleto" style="height:96px"></div></div>').join('');
+    $('historial').innerHTML = '<li><div class="esqueleto" style="height:40px;flex:1"></div></li>';
+  }
+
+  async function cargar() {
+    $('saludo').textContent = nombreEstudiante().split(' ')[0];
+    esqueletos();
     try {
-      const info = await api('/api/estudiantes/' + $('estudiante').value);
+      const info = await UP.api('/api/estudiantes/' + $('estudiante').value);
       saldo = info.saldo;
-      $('saldo').textContent = info.saldo + ' pts';
-      $('wallet').innerHTML = `Wallet: <a href="${info.explorador}" target="_blank" rel="noopener">${info.wallet.slice(0, 6)}…${info.wallet.slice(-4)}</a>`;
+      $('saldo').innerHTML = `${UP.numero(info.saldo)}<span>pts</span>`;
+      $('wallet').href = info.explorador;
+      $('wallet').textContent = `Wallet ${UP.corta(info.wallet)} · ver en la cadena ↗`;
       pintarCatalogo();
       pintarHistorial(info.historial);
-    } catch (e) {
-      $('saldo').textContent = '—';
-      mostrarMensaje(e.message, 'error');
+    } catch (error) {
+      $('saldo').innerHTML = '—<span>pts</span>';
+      UP.aviso(UP.esc(error.message), 'error');
     }
   }
 
   function pintarCatalogo() {
-    const nombreComercio = (id) => datos.comercios.find((c) => c.id === id)?.nombre ?? id;
-    $('catalogo').innerHTML = datos.catalogo.map((r) => `
-      <li>
-        <div>${r.nombre}<br><small>${nombreComercio(r.comercio)}</small></div>
-        <button data-id="${r.id}" ${saldo < r.puntos ? 'disabled' : ''}>${r.puntos} pts</button>
-      </li>`).join('');
-    $('catalogo').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => pedirCodigo(b.dataset.id)));
+    const alcanzables = datos.catalogo.filter((r) => saldo >= r.puntos).length;
+    $('disponibles').textContent = `${alcanzables} de ${datos.catalogo.length} disponibles`;
+    $('catalogo').innerHTML = datos.catalogo.map((r) => {
+      const alcanza = saldo >= r.puntos;
+      const progreso = Math.min(100, Math.round((saldo / r.puntos) * 100));
+      return `
+        <article class="tarjeta recompensa">
+          <div class="cuerpo">
+            <span class="icono">${UP.emoji(r.id)}</span>
+            <div><h3>${UP.esc(r.nombre)}</h3><small>${UP.esc(nombreComercio(r.comercio))}</small></div>
+          </div>
+          ${alcanza ? '' : `<div><div class="barra-progreso"><div style="width:${progreso}%"></div></div>
+            <div class="falta" style="margin-top:6px">Te faltan ${r.puntos - saldo} pts</div></div>`}
+          <div class="pie">
+            <span class="precio num">${r.puntos} <small>pts</small></span>
+            <button class="boton chico" data-id="${r.id}" ${alcanza ? '' : 'disabled'}>Canjear</button>
+          </div>
+        </article>`;
+    }).join('');
+    $('catalogo').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => pedirCodigo(b)));
   }
 
   function pintarHistorial(historial) {
     if (!historial.length) {
-      $('historial').innerHTML = '<li><small>Aún no hay movimientos.</small></li>';
+      $('historial').innerHTML = '<li class="vacio" style="display:block"><span class="icono">🌱</span>Aún no hay movimientos.<br><small>Gana puntos pagando a tiempo o participando.</small></li>';
       return;
     }
-    const nombre = (h) => h.tipo === 'award'
-      ? 'Puntos recibidos'
-      : 'Canje: ' + (datos.catalogo.find((r) => r.id === h.recompensa)?.nombre ?? h.recompensa);
-    $('historial').innerHTML = historial.map((h) => `
-      <li>
-        <div>${nombre(h)}<br><small>${new Date(h.fecha).toLocaleString('es-GT')} · <a href="${h.explorador}" target="_blank" rel="noopener">ver en la cadena</a></small></div>
-        <span class="puntos ${h.tipo === 'award' ? 'pos' : 'neg'}">${h.tipo === 'award' ? '+' : '−'}${h.cantidad}</span>
-      </li>`).join('');
+    $('historial').innerHTML = historial.map((h) => {
+      const gana = h.tipo === 'award';
+      const titulo = gana ? 'Puntos recibidos' : (recompensa(h.recompensa)?.nombre ?? h.recompensa);
+      return `
+        <li>
+          <span class="icono ${gana ? 'ok' : ''}">${gana ? '＋' : UP.emoji(h.recompensa)}</span>
+          <div class="texto">
+            <strong>${UP.esc(titulo)}</strong>
+            <small>${UP.fecha(h.fecha)} · <a href="${h.explorador}" target="_blank" rel="noopener">ver ↗</a></small>
+          </div>
+          <span class="cantidad ${gana ? 'mas' : 'menos'}">${gana ? '+' : '−'}${h.cantidad}</span>
+        </li>`;
+    }).join('');
   }
 
-  async function pedirCodigo(idRecompensa) {
-    mostrarMensaje('');
+  async function pedirCodigo(boton) {
+    const original = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span>';
     try {
-      const r = await api('/api/codigos', {
+      const r = await UP.api('/api/codigos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ estudiante: $('estudiante').value, recompensa: idRecompensa }),
+        body: { estudiante: $('estudiante').value, recompensa: boton.dataset.id },
       });
-      $('qr-img').src = r.qr;
-      $('qr-codigo').textContent = r.codigo;
-      $('qr-detalle').textContent = `${r.recompensa.nombre} · ${r.recompensa.puntos} pts · válido hasta ${new Date(r.expira).toLocaleTimeString('es-GT')}`;
-      $('tarjeta-qr').classList.remove('oculto');
-      $('tarjeta-qr').scrollIntoView({ behavior: 'smooth' });
-    } catch (e) {
-      mostrarMensaje(e.message, 'error');
+      abrirModal(r);
+    } catch (error) {
+      UP.aviso(UP.esc(error.message), 'error');
+    } finally {
+      boton.disabled = false;
+      boton.innerHTML = original;
     }
   }
 
-  iniciar().catch((e) => mostrarMensaje(e.message, 'error'));
+  // Muestra el QR y consulta cada 3 s si la caja ya confirmó el canje.
+  function abrirModal({ codigo, qr, expira, recompensa: r }) {
+    $('modal-titulo').textContent = r.nombre;
+    $('qr-img').src = qr;
+    $('qr-codigo').textContent = codigo;
+    $('qr-puntos').textContent = `${r.puntos} pts · ${nombreComercio(r.comercio)}`;
+    $('modal-espera').classList.remove('oculto');
+    $('modal-listo').classList.add('oculto');
+    $('modal').classList.remove('oculto');
+
+    const vence = new Date(expira).getTime();
+    let consultas = 0;
+    espera = setInterval(async () => {
+      const restante = Math.max(0, vence - Date.now());
+      const mm = String(Math.floor(restante / 60000)).padStart(2, '0');
+      const ss = String(Math.floor((restante % 60000) / 1000)).padStart(2, '0');
+      $('qr-estado').textContent = restante ? `Esperando a la caja · vence en ${mm}:${ss}` : 'El código venció';
+
+      if (++consultas % 3 !== 0) return; // cada 3 segundos
+      try {
+        const c = await UP.api('/api/codigos/' + codigo);
+        if (c.estado === 'usado') {
+          detenerEspera();
+          $('listo-detalle').textContent = `Canjeaste ${r.nombre} por ${r.puntos} pts. Los puntos se quemaron en la cadena.`;
+          $('modal-espera').classList.add('oculto');
+          $('modal-listo').classList.remove('oculto');
+        } else if (c.estado === 'vencido') {
+          detenerEspera();
+        }
+      } catch { /* se reintenta en la siguiente vuelta */ }
+    }, 1000);
+  }
+
+  function detenerEspera() { clearInterval(espera); espera = null; }
+
+  function cerrarModal() {
+    detenerEspera();
+    $('modal').classList.add('oculto');
+    cargar();
+  }
+
+  iniciar().catch((e) => UP.aviso(UP.esc(e.message), 'error'));
 </script>
 </body>
 </html>

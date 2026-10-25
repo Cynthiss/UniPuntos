@@ -2,34 +2,90 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>UniPuntos</title>
+  <meta name="description" content="Recompensas universitarias por puntualidad y participación, sobre Solana.">
+  <meta name="theme-color" content="#1d5c47">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
   <link rel="stylesheet" href="estilos.css">
 </head>
-<body>
+<body data-pagina="inicio">
 <main>
-  <h1>UniPuntos</h1>
-  <p class="sub">Demo del nivel 1 en Solana devnet.</p>
-  <div class="tarjeta">
-    <ul class="lista">
-      <li><a href="estudiante.html">App del estudiante</a><small>saldo, catálogo, QR</small></li>
-      <li><a href="comercio.html">Caja del comercio</a><small>confirmar canjes</small></li>
-    </ul>
-  </div>
-  <div class="tarjeta">
-    <h2>Auditoría pública</h2>
-    <p id="emision" class="pequeno">Consultando la cadena…</p>
-  </div>
+  <section class="heroe">
+    <h1>Tu puntualidad y tu esfuerzo <em>valen puntos</em>.</h1>
+    <p>Gana puntos por pagar a tiempo y por participar en el campus. Canjéalos en parqueo, exámenes y comercios. Son tuyos: nadie puede quitártelos.</p>
+  </section>
+
+  <section class="seccion rejilla rejilla-2">
+    <a class="tarjeta accion" href="/estudiante.html">
+      <span class="icono">🎓</span>
+      <span><h3>Mis puntos</h3><small>Saldo, recompensas y código para canjear</small></span>
+      <span class="flecha">›</span>
+    </a>
+    <a class="tarjeta accion" href="/comercio.html">
+      <span class="icono">🧾</span>
+      <span><h3>Caja del comercio</h3><small>Escanea el código y confirma el canje</small></span>
+      <span class="flecha">›</span>
+    </a>
+  </section>
+
+  <section class="seccion">
+    <div class="fila-entre" style="margin-bottom:12px">
+      <h2>Auditoría pública</h2>
+      <a id="explorador" class="insignia marca oculto" target="_blank" rel="noopener">Ver en la cadena ↗</a>
+    </div>
+    <div class="rejilla rejilla-4" id="datos">
+      <div class="tarjeta dato"><small>En circulación</small><div class="valor esqueleto" style="height:32px;width:60%"></div></div>
+      <div class="tarjeta dato"><small>Otorgados</small><div class="valor esqueleto" style="height:32px;width:60%"></div></div>
+      <div class="tarjeta dato"><small>Canjeados</small><div class="valor esqueleto" style="height:32px;width:60%"></div></div>
+      <div class="tarjeta dato"><small>Presupuesto del período</small><div class="valor esqueleto" style="height:32px;width:60%"></div></div>
+    </div>
+    <p class="suave" id="reglas" style="font-size:.88rem;margin:12px 4px 0"></p>
+  </section>
+
+  <section class="seccion">
+    <h2>Garantías del sistema</h2>
+    <div class="rejilla rejilla-2">
+      <div class="tarjeta garantia"><span class="icono">🔒</span><div><h3>No transferibles</h3><p>Los puntos no se compran ni se venden: no hay mercado negro.</p></div></div>
+      <div class="tarjeta garantia"><span class="icono">✋</span><div><h3>Nadie puede quitártelos</h3><p>Solo tú puedes gastar tus puntos. Ni la universidad puede quemarlos sin tu firma.</p></div></div>
+      <div class="tarjeta garantia"><span class="icono">🔎</span><div><h3>Emisión auditable</h3><p>Cualquiera puede verificar cuánto se emitió y canjeó, y las reglas que lo limitan.</p></div></div>
+      <div class="tarjeta garantia"><span class="icono">🕶️</span><div><h3>Privacidad</h3><p>En la cadena no van tus notas ni tus pagos. Los comercios no saben quién eres.</p></div></div>
+    </div>
+  </section>
 </main>
+
+<script src="app.js"></script>
 <script>
-  fetch('/api/emision').then((r) => r.json()).then((e) => {
-    document.getElementById('emision').innerHTML = e.error
-      ? e.error
-      : `Nivel ${e.nivel}. Puntos en circulación: <strong>${e.enCirculacion}</strong>. Cualquiera puede verificarlo en el <a href="${e.explorador}" target="_blank" rel="noopener">explorador</a>.`
-        + (e.nivel === 2
-          ? `<br>Reglas del programa: máximo ${e.topeEstudiante} puntos por estudiante y ${e.presupuestoPeriodo} en total por período (${e.otorgadoEnPeriodo} usados).`
-          : '');
-  });
+  (async () => {
+    const datos = document.getElementById('datos');
+    try {
+      const e = await UP.api('/api/emision');
+      const nivel2 = e.nivel === 2;
+      const tarjeta = (titulo, valor, extra = '') =>
+        `<div class="tarjeta dato"><small>${titulo}</small><div class="valor num">${valor}</div>${extra}</div>`;
+      const usado = nivel2 ? Math.round((e.otorgadoEnPeriodo / e.presupuestoPeriodo) * 100) : 0;
+
+      datos.innerHTML = [
+        tarjeta('En circulación', UP.numero(e.enCirculacion)),
+        tarjeta('Otorgados', nivel2 ? UP.numero(e.totalOtorgado) : '—'),
+        tarjeta('Canjeados', nivel2 ? UP.numero(e.totalCanjeado) : '—'),
+        nivel2
+          ? tarjeta('Presupuesto del período', `${usado}%`,
+              `<div class="barra-progreso" style="margin-top:10px"><div style="width:${Math.max(usado, 2)}%"></div></div>`)
+          : tarjeta('Presupuesto del período', '—'),
+      ].join('');
+
+      document.getElementById('reglas').textContent = nivel2
+        ? `Reglas fijadas en el programa: máximo ${UP.numero(e.topeEstudiante)} puntos por estudiante y ${UP.numero(e.presupuestoPeriodo)} en total cada ${e.diasPorPeriodo} días. Nadie puede cambiarlas.`
+        : 'Nivel 1: la universidad emite directamente. Las reglas con topes están en el nivel 2.';
+      const enlace = document.getElementById('explorador');
+      enlace.href = e.explorador;
+      enlace.classList.remove('oculto');
+    } catch (error) {
+      datos.innerHTML = `<div class="tarjeta vacio" style="grid-column:1/-1"><span class="icono error">!</span>${UP.esc(error.message)}</div>`;
+    }
+  })();
 </script>
 </body>
 </html>

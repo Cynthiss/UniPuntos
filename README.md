@@ -52,9 +52,12 @@ src/
   server.js       Backend web: API y códigos QR de un solo uso
 idl/
   unipuntos.json  Interfaz del programa (la genera anchor build; se copia con npm run idl)
-public/
-  estudiante.html Saldo, historial, catálogo y QR (adaptable al celular)
+public/           App web (adaptable al celular e instalable como app)
+  index.html      Inicio: estadísticas leídas de la cadena y garantías
+  estudiante.html Saldo, recompensas, movimientos y QR que se actualiza al confirmarse
   comercio.html   Caja: ingresa o escanea el código y confirma el canje
+  app.js          Navegación, avisos y utilidades compartidas
+  estilos.css     Estilos (modo claro y oscuro)
 data/
   seed.json       Datos de prueba: 3 estudiantes, 2 comercios, 4 recompensas, 3 conductas
   *.local.json    Generados al usar la demo (mint, motivos, historial por nivel, códigos). No se suben.

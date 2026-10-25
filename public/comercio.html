@@ -2,129 +2,174 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UniPuntos · Comercio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Caja · UniPuntos</title>
+  <meta name="theme-color" content="#1d5c47">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
   <link rel="stylesheet" href="estilos.css">
 </head>
-<body>
+<body data-pagina="caja">
 <main>
-  <h1>UniPuntos · Caja</h1>
-  <p class="sub">Escanea o escribe el código del estudiante. No verás su identidad: solo la recompensa.</p>
-
-  <div class="tarjeta">
-    <label for="comercio">Comercio (demo)</label>
-    <select id="comercio"></select>
-  </div>
-
-  <div class="tarjeta">
-    <label for="codigo">Código de canje</label>
-    <div class="fila">
-      <input id="codigo" class="codigo" maxlength="8" autocomplete="off" placeholder="ABCD2345">
-      <button id="buscar">Buscar</button>
+  <div class="encabezado fila-entre">
+    <div>
+      <small>Caja</small>
+      <h1 id="nombre-comercio">…</h1>
     </div>
-    <!-- Escaneo con cámara: solo si el navegador soporta BarcodeDetector
-         (Chrome en Android, por ejemplo). Si no, se escribe el código. -->
-    <button class="secundario oculto" id="escanear" style="margin-top:8px">Escanear QR</button>
-    <video id="video" class="oculto" playsinline muted></video>
+    <select id="comercio" class="selector" aria-label="Cambiar de comercio (demo)"></select>
   </div>
 
-  <div class="tarjeta oculto" id="detalle">
-    <h2 id="detalle-nombre"></h2>
-    <p id="detalle-info" class="pequeno"></p>
-    <button id="confirmar">Confirmar canje</button>
-  </div>
-  <p class="mensaje" id="mensaje"></p>
+  <div class="dos-columnas">
+    <div>
+      <section class="tarjeta">
+        <label class="etiqueta" for="codigo">Código del estudiante</label>
+        <input id="codigo" class="campo-codigo" maxlength="8" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" placeholder="ABCD2345" inputmode="text">
+        <div class="rejilla" style="grid-template-columns:1fr auto;margin-top:12px">
+          <button class="boton" id="buscar">Buscar código</button>
+          <!-- Escaneo con cámara solo si el navegador soporta BarcodeDetector (p. ej. Chrome en Android). -->
+          <button class="boton fantasma oculto" id="escanear" aria-label="Escanear QR">📷</button>
+        </div>
+        <video id="video" class="oculto" playsinline muted></video>
+      </section>
 
-  <div class="tarjeta">
-    <h2>Canjes registrados</h2>
-    <p class="pequeno">Base para la liquidación mensual con la universidad.</p>
-    <ul class="lista" id="canjes"></ul>
+      <section class="tarjeta oculto" id="detalle" style="margin-top:12px">
+        <div class="fila" style="align-items:flex-start">
+          <span class="icono" id="detalle-icono"></span>
+          <div style="flex:1">
+            <h2 id="detalle-nombre"></h2>
+            <div class="fila" style="margin-top:6px;flex-wrap:wrap;gap:6px">
+              <span class="insignia marca num" id="detalle-puntos"></span>
+              <span class="insignia" id="detalle-estado"></span>
+            </div>
+          </div>
+        </div>
+        <p class="suave" style="font-size:.85rem;margin:14px 0">🕶️ La identidad del estudiante no se muestra en caja.</p>
+        <button class="boton ancho" id="confirmar">Confirmar canje</button>
+      </section>
+    </div>
+
+    <section class="seccion" style="margin-top:0">
+      <div class="tarjeta">
+        <div class="fila-entre" style="margin-bottom:4px">
+          <h2>Canjes registrados</h2>
+          <span class="insignia num" id="total"></span>
+        </div>
+        <p class="suave" style="font-size:.82rem;margin:0 0 14px">Base para la liquidación mensual con la universidad.</p>
+        <ul class="lista" id="canjes"></ul>
+      </div>
+    </section>
   </div>
 </main>
 
+<script src="app.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   let datos, codigoActual = null;
-
-  async function api(url, opciones) {
-    const r = await fetch(url, opciones);
-    const json = await r.json();
-    if (!r.ok) throw new Error(json.error || 'Error');
-    return json;
-  }
-
-  function mostrarMensaje(html, tipo = '') {
-    $('mensaje').innerHTML = html;
-    $('mensaje').className = 'mensaje ' + tipo;
-  }
+  const ESTADOS = {
+    pendiente: ['Listo para canjear', 'ok'],
+    usado: ['Ya fue usado', 'error'],
+    vencido: ['Vencido', 'error'],
+    procesando: ['Procesando…', ''],
+  };
 
   async function iniciar() {
-    datos = await api('/api/datos');
-    $('comercio').innerHTML = datos.comercios.map((c) => `<option value="${c.id}">${c.nombre}</option>`).join('');
-    $('comercio').addEventListener('change', () => { limpiar(); cargarCanjes(); });
+    datos = await UP.api('/api/datos');
+    const recordado = (() => { try { return localStorage.getItem('up-comercio'); } catch { return null; } })();
+    $('comercio').innerHTML = datos.comercios
+      .map((c) => `<option value="${c.id}" ${c.id === recordado ? 'selected' : ''}>${UP.esc(c.nombre)}</option>`).join('');
+    $('comercio').addEventListener('change', () => {
+      try { localStorage.setItem('up-comercio', $('comercio').value); } catch {}
+      limpiar();
+      cargarCanjes();
+    });
     $('buscar').addEventListener('click', () => buscar($('codigo').value));
     $('codigo').addEventListener('keydown', (e) => { if (e.key === 'Enter') buscar($('codigo').value); });
+    // Busca solo en cuanto se completan los 8 caracteres.
+    $('codigo').addEventListener('input', () => { if ($('codigo').value.trim().length === 8) buscar($('codigo').value); });
     $('confirmar').addEventListener('click', confirmar);
     if ('BarcodeDetector' in window) {
       $('escanear').classList.remove('oculto');
       $('escanear').addEventListener('click', escanear);
     }
+    limpiar();
     cargarCanjes();
   }
 
+  const nombreComercio = () => datos.comercios.find((c) => c.id === $('comercio').value).nombre;
+
   function limpiar() {
     codigoActual = null;
+    $('nombre-comercio').textContent = nombreComercio();
     $('detalle').classList.add('oculto');
-    mostrarMensaje('');
   }
 
   async function buscar(codigo) {
-    limpiar();
     codigo = codigo.trim().toUpperCase();
     if (!codigo) return;
+    $('buscar').disabled = true;
     try {
-      const c = await api('/api/codigos/' + encodeURIComponent(codigo));
+      const c = await UP.api('/api/codigos/' + encodeURIComponent(codigo));
       const deEsteComercio = c.recompensa.comercio === $('comercio').value;
+      const [texto, tipo] = deEsteComercio ? ESTADOS[c.estado] : ['De otro comercio', 'error'];
+      $('detalle-icono').textContent = UP.emoji(c.recompensa.id);
       $('detalle-nombre').textContent = c.recompensa.nombre;
-      $('detalle-info').textContent = `${c.recompensa.puntos} puntos · estado: ${c.estado}`;
+      $('detalle-puntos').textContent = `${c.recompensa.puntos} pts`;
+      $('detalle-estado').textContent = texto;
+      $('detalle-estado').className = `insignia ${tipo}`;
       $('confirmar').disabled = c.estado !== 'pendiente' || !deEsteComercio;
       $('detalle').classList.remove('oculto');
-      if (!deEsteComercio) mostrarMensaje('Este código es para otro comercio.', 'error');
       codigoActual = codigo;
-    } catch (e) {
-      mostrarMensaje(e.message, 'error');
+    } catch (error) {
+      $('detalle').classList.add('oculto');
+      UP.aviso(UP.esc(error.message), 'error');
+    } finally {
+      $('buscar').disabled = false;
     }
   }
 
   async function confirmar() {
-    $('confirmar').disabled = true;
-    mostrarMensaje('Quemando puntos en la cadena…');
+    const boton = $('confirmar');
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span> Registrando en la cadena…';
     try {
-      const r = await api(`/api/codigos/${codigoActual}/confirmar`, {
+      const r = await UP.api(`/api/codigos/${codigoActual}/confirmar`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comercio: $('comercio').value }),
+        body: { comercio: $('comercio').value },
       });
       $('detalle').classList.add('oculto');
       $('codigo').value = '';
-      mostrarMensaje(`Canje confirmado: ${r.recompensa.nombre}. <a href="${r.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, 'ok');
+      UP.aviso(`✓ ${UP.esc(r.recompensa.nombre)} canjeado. <a href="${r.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, 'ok', 6);
       cargarCanjes();
-    } catch (e) {
-      $('confirmar').disabled = false;
-      mostrarMensaje(e.message, 'error');
+    } catch (error) {
+      boton.disabled = false;
+      UP.aviso(UP.esc(error.message), 'error');
+    } finally {
+      boton.textContent = 'Confirmar canje';
     }
   }
 
   async function cargarCanjes() {
-    const { canjes } = await api(`/api/comercios/${$('comercio').value}/canjes`);
-    const nombre = (id) => datos.catalogo.find((r) => r.id === id)?.nombre ?? id;
-    $('canjes').innerHTML = canjes.length
-      ? canjes.slice().reverse().map((c) => `
-          <li>
-            <div>${nombre(c.recompensa)}<br><small>${new Date(c.fecha).toLocaleString('es-GT')} · <a href="${c.explorador}" target="_blank" rel="noopener">ver</a></small></div>
-            <span class="puntos">${c.cantidad} pts</span>
-          </li>`).join('')
-      : '<li><small>Sin canjes todavía.</small></li>';
+    $('canjes').innerHTML = '<li><div class="esqueleto" style="height:40px;flex:1"></div></li>';
+    try {
+      const { canjes } = await UP.api(`/api/comercios/${$('comercio').value}/canjes`);
+      const total = canjes.reduce((s, c) => s + c.cantidad, 0);
+      $('total').textContent = `${canjes.length} · ${UP.numero(total)} pts`;
+      const nombre = (id) => datos.catalogo.find((r) => r.id === id)?.nombre ?? id;
+      $('canjes').innerHTML = canjes.length
+        ? canjes.slice().reverse().map((c) => `
+            <li>
+              <span class="icono">${UP.emoji(c.recompensa)}</span>
+              <div class="texto">
+                <strong>${UP.esc(nombre(c.recompensa))}</strong>
+                <small>${UP.fecha(c.fecha)} · <a href="${c.explorador}" target="_blank" rel="noopener">ver ↗</a></small>
+              </div>
+              <span class="cantidad">${c.cantidad} pts</span>
+            </li>`).join('')
+        : '<li class="vacio" style="display:block"><span class="icono">🧾</span>Sin canjes todavía.</li>';
+    } catch (error) {
+      $('canjes').innerHTML = `<li class="vacio" style="display:block">${UP.esc(error.message)}</li>`;
+    }
   }
 
   // Escaneo del QR con la cámara (si el navegador lo permite).
@@ -148,12 +193,12 @@
         }
       };
       buscarCuadro();
-    } catch (e) {
-      mostrarMensaje('No se pudo abrir la cámara: ' + e.message, 'error');
+    } catch (error) {
+      UP.aviso('No se pudo abrir la cámara: ' + UP.esc(error.message), 'error');
     }
   }
 
-  iniciar().catch((e) => mostrarMensaje(e.message, 'error'));
+  iniciar().catch((e) => UP.aviso(UP.esc(e.message), 'error'));
 </script>
 </body>
 </html>
