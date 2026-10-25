@@ -156,6 +156,12 @@ Antes de volver a devnet, borra `data/*.local.json`, porque el mint local no exi
 2. El comercio ingresa el código. Ve **qué** se canjea y cuántos puntos cuesta, pero **no quién** lo canjea.
 3. El comercio confirma. El backend **bloquea el código antes** de ir a la cadena, así dos confirmaciones simultáneas no pueden quemar dos veces. Luego quema los puntos con la firma del estudiante y la universidad paga la comisión.
 4. El canje queda registrado con su firma de transacción. Es la base de la **liquidación mensual**: la universidad reembolsa en quetzales a cada comercio según los canjes que se pueden verificar en la cadena.
+5. **Sin cobros dobles si la red falla.** La transacción se firma antes de enviarla y su firma se guarda en el código. Si la confirmación no llega, el servidor busca esa firma en la cadena en lugar de suponer:
+   - si se registró, el canje queda como usado y no se vuelve a cobrar;
+   - si falló, o su blockhash venció (ya no puede registrarse), el código vuelve a estar disponible;
+   - si la red no responde, el código queda bloqueado como "verificando en la cadena" y el servidor lo revisa cada 15 segundos, también después de reiniciarse.
+
+   Los puntos solo bajan cuando la transacción queda registrada: generar el QR, que el código venza o que lo intente confirmar otro comercio no resta nada.
 
 ## Decisiones de la demo (y qué cambia en producción)
 

@@ -1,5 +1,5 @@
 // =============================================================================
-// server.js — Backend web de la demo (nivel 1).
+// server.js — Backend web de la demo (niveles 1 y 2, según UNIPUNTOS_NIVEL).
 //
 // Páginas:
 //   /estudiante.html  saldo, historial, catálogo y QR de un solo uso
@@ -12,6 +12,11 @@
 //      estudiante (los comercios no ven datos académicos ni financieros).
 //   3. El comercio confirma → el backend verifica que el código no se haya usado,
 //      lo bloquea y quema los puntos en la cadena con la firma del estudiante.
+//      Los puntos solo bajan cuando la transacción queda registrada.
+//
+// Sin cobros dobles: la firma de la transacción se guarda en el código ANTES
+// de enviarla. Si la red no confirma, el código queda "procesando" y se le
+// pregunta a la cadena por esa firma; nunca vuelve a pendiente a ciegas.
 //
 // DEMO: no hay inicio de sesión real. En producción el estudiante entraría con
 // su cuenta universitaria y firmaría el canje desde su wallet (WDK).
@@ -24,6 +29,7 @@ import QRCode from 'qrcode';
 import {
   RAIZ, NIVEL, seed, canjearPuntos, consultarSaldo, consultarEmision,
   historialDe, canjesDeComercio, llaveEstudiante, enlaceExplorador,
+  resultadoDeTransaccion, registrarEnHistorial,
 } from './puntos.js';
 
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -51,6 +57,60 @@ function estaVencido(c) {
 }
 
 const buscarRecompensa = (id) => seed.catalogo.find((r) => r.id === id);
+
+// ---------------------------------------------------------------------------
+// Canjes a medias: se resuelven preguntando a la cadena
+// ---------------------------------------------------------------------------
+// Códigos cuya transacción se está enviando en este momento.
+const enCurso = new Set();
+
+function marcarUsado(c, firma) {
+  Object.assign(c, { estado: 'usado', firma, usado: new Date().toISOString() });
+  guardarCodigos();
+}
+
+function volverAPendiente(c) {
+  c.estado = 'pendiente';
+  delete c.firma;
+  delete c.alturaMaxima;
+  guardarCodigos();
+}
+
+/**
+ * Un código "procesando" que no está en curso quedó a medias (la red no
+ * respondió o el servidor se reinició). Se busca su firma en la cadena:
+ *   registrada → usado · falló o venció → pendiente · sin respuesta → sigue bloqueado.
+ */
+async function reconciliar(codigo) {
+  const c = codigos[codigo];
+  if (c?.estado !== 'procesando' || enCurso.has(codigo)) return;
+  if (!c.firma) return volverAPendiente(c); // nunca se llegó a firmar: no se envió nada
+
+  enCurso.add(codigo);
+  try {
+    const resultado = await resultadoDeTransaccion(c.firma, c.alturaMaxima, { unaVez: true });
+    if (resultado === 'confirmada') {
+      const recompensa = buscarRecompensa(c.recompensa);
+      marcarUsado(c, c.firma);
+      registrarEnHistorial({
+        tipo: 'redeem', estudiante: c.estudiante, cantidad: recompensa.puntos, firma: c.firma,
+        fecha: c.usado, recompensa: recompensa.id, comercio: recompensa.comercio,
+      });
+      console.log(`Canje ${codigo}: la transacción sí se registró (${c.firma}).`);
+    } else if (resultado === 'fallida' || resultado === 'expirada') {
+      volverAPendiente(c);
+      console.log(`Canje ${codigo}: la transacción no se registró; el código vuelve a estar disponible.`);
+    }
+    // 'en-espera' o 'incierta': se queda bloqueado y se revisa de nuevo más tarde.
+  } finally {
+    enCurso.delete(codigo);
+  }
+}
+
+// Revisa periódicamente los canjes a medias (también los que quedaron al reiniciar).
+const reconciliarTodo = () => Object.keys(codigos).forEach((codigo) => reconciliar(codigo).catch(() => {}));
+setInterval(reconciliarTodo, 15_000).unref();
+reconciliarTodo();
 
 // ---------------------------------------------------------------------------
 // Servidor
@@ -108,9 +168,11 @@ app.post('/api/codigos', async (req, res, next) => {
 });
 
 // Paso 2: el comercio consulta el código. No se revela la identidad del estudiante.
-app.get('/api/codigos/:codigo', (req, res) => {
-  const c = codigos[req.params.codigo.toUpperCase()];
+app.get('/api/codigos/:codigo', async (req, res) => {
+  const codigo = req.params.codigo.toUpperCase();
+  const c = codigos[codigo];
   if (!c) return res.status(404).json({ error: 'Código no existe.' });
+  await reconciliar(codigo).catch(() => {});
   const recompensa = buscarRecompensa(c.recompensa);
   res.json({
     recompensa,
@@ -129,25 +191,48 @@ app.post('/api/codigos/:codigo/confirmar', async (req, res, next) => {
   if (req.body?.comercio !== recompensa.comercio) {
     return res.status(403).json({ error: 'Este código es para otro comercio.' });
   }
+  await reconciliar(codigo).catch(() => {});
   if (estaVencido(c)) return res.status(410).json({ error: 'El código venció. Pide al estudiante uno nuevo.' });
+  if (c.estado === 'procesando') {
+    return res.status(409).json({ error: 'Este canje se está verificando en la cadena. No lo confirmes otra vez.' });
+  }
   if (c.estado !== 'pendiente') return res.status(409).json({ error: 'Este código ya fue usado.' });
 
   // Se bloquea ANTES de ir a la cadena para que dos confirmaciones simultáneas
   // no puedan quemar dos veces con el mismo código.
   c.estado = 'procesando';
   guardarCodigos();
+  enCurso.add(codigo);
   try {
-    const { firma } = await canjearPuntos(c.estudiante, recompensa.puntos, {
-      recompensa: recompensa.id, comercio: recompensa.comercio, codigo,
-    });
-    Object.assign(c, { estado: 'usado', firma, usado: new Date().toISOString() });
-    guardarCodigos();
+    const { firma } = await canjearPuntos(
+      c.estudiante,
+      recompensa.puntos,
+      { recompensa: recompensa.id, comercio: recompensa.comercio, codigo },
+      // Se guarda la firma antes de enviar: si algo falla, se sabe qué buscar.
+      { alFirmar: (firmaTx, alturaMaxima) => { Object.assign(c, { firma: firmaTx, alturaMaxima }); guardarCodigos(); } },
+    );
+    marcarUsado(c, firma);
     res.json({ ok: true, recompensa, explorador: enlaceExplorador(firma) });
   } catch (e) {
-    // Si la transacción falló, el código vuelve a quedar disponible.
-    c.estado = 'pendiente';
-    guardarCodigos();
+    enCurso.delete(codigo);
+    // Seguro que no se registró (o ni se llegó a enviar): el código vuelve a estar disponible.
+    if (!c.firma || e.definitiva) {
+      volverAPendiente(c);
+      return next(e);
+    }
+    // Pudo haberse registrado: se pregunta a la cadena en vez de suponer.
+    await reconciliar(codigo).catch(() => {});
+    if (c.estado === 'usado') return res.json({ ok: true, recompensa, explorador: enlaceExplorador(c.firma) });
+    if (c.estado === 'procesando') {
+      return res.status(202).json({
+        verificando: true,
+        mensaje: 'La red está lenta: el canje se está verificando en la cadena. No lo confirmes otra vez.',
+        explorador: enlaceExplorador(c.firma),
+      });
+    }
     next(e);
+  } finally {
+    enCurso.delete(codigo);
   }
 });
 

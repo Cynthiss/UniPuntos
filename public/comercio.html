@@ -70,7 +70,7 @@
     pendiente: ['Listo para canjear', 'ok'],
     usado: ['Ya fue usado', 'error'],
     vencido: ['Vencido', 'error'],
-    procesando: ['Procesando…', ''],
+    procesando: ['Verificando en la cadena…', ''],
   };
 
   async function iniciar() {
@@ -137,6 +137,13 @@
         method: 'POST',
         body: { comercio: $('comercio').value },
       });
+      if (r.verificando) {
+        // La red no confirmó a tiempo: el código queda bloqueado mientras se verifica.
+        $('detalle-estado').textContent = ESTADOS.procesando[0];
+        $('detalle-estado').className = 'insignia';
+        UP.aviso(`${UP.esc(r.mensaje)} <a href="${r.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, '', 8);
+        return;
+      }
       $('detalle').classList.add('oculto');
       $('codigo').value = '';
       UP.aviso(`✓ ${UP.esc(r.recompensa.nombre)} canjeado. <a href="${r.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, 'ok', 6);

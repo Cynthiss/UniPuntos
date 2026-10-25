@@ -9,12 +9,7 @@
 // - La universidad paga las comisiones (fee payer); el estudiante no necesita SOL.
 // =============================================================================
 import path from 'node:path';
-import {
-  PublicKey,
-  Transaction,
-  TransactionInstruction,
-  sendAndConfirmTransaction,
-} from '@solana/web3.js';
+import { PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import {
   TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -27,6 +22,7 @@ import {
 import {
   RAIZ, conexion, leerJson, llaveUniversidad, llaveEstudiante, validarCantidad,
   hashMotivo, completarMotivo, guardarMotivo, registrarEnHistorial, canjesDelHistorial,
+  enviarTransaccion,
 } from './comun.js';
 
 const ARCHIVO_MINT = path.join(RAIZ, 'data', 'mint.local.json');
@@ -80,7 +76,7 @@ export async function otorgarPuntos(idEstudiante, cantidad, motivo) {
     instruccionMemo(`unipuntos:award:${hash}`, [universidad.publicKey]),
   );
 
-  const firma = await sendAndConfirmTransaction(conexion, tx, [universidad]);
+  const firma = await enviarTransaccion(tx, [universidad]);
   guardarMotivo(hash, motivoCompleto);
   registrarEnHistorial({ tipo: 'award', estudiante: idEstudiante, cantidad, hash, firma, fecha: motivoCompleto.fecha });
   return { firma, hash };
@@ -91,8 +87,9 @@ export async function otorgarPuntos(idEstudiante, cantidad, motivo) {
  * La transacción la firman DOS partes:
  *   - el estudiante (dueño de los puntos): sin su firma no se puede quemar nada.
  *   - la universidad, solo como fee payer (paga la comisión).
+ * `alFirmar` recibe la firma antes de enviar (ver enviarTransaccion en comun.js).
  */
-export async function canjearPuntos(idEstudiante, cantidad, detalle) {
+export async function canjearPuntos(idEstudiante, cantidad, detalle, { alFirmar } = {}) {
   validarCantidad(cantidad);
   const universidad = llaveUniversidad();
   const estudiante = llaveEstudiante(idEstudiante);
@@ -111,9 +108,8 @@ export async function canjearPuntos(idEstudiante, cantidad, detalle) {
     createBurnInstruction(ata, mint, estudiante.publicKey, cantidad, [], TOKEN_2022_PROGRAM_ID),
     instruccionMemo(`unipuntos:redeem:${hash}`, [estudiante.publicKey]),
   );
-  tx.feePayer = universidad.publicKey;
-
-  const firma = await sendAndConfirmTransaction(conexion, tx, [universidad, estudiante]);
+  // La universidad va primero: es la que paga la comisión.
+  const firma = await enviarTransaccion(tx, [universidad, estudiante], { alFirmar });
   guardarMotivo(hash, registro);
   registrarEnHistorial({
     tipo: 'redeem', estudiante: idEstudiante, cantidad, hash, firma, fecha: registro.fecha,

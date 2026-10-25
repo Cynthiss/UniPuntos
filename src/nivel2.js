@@ -27,6 +27,7 @@ import anchor from '@anchor-lang/core';
 import {
   RAIZ, conexion, seed, llaveUniversidad, llaveEstudiante, llaveComercio, validarCantidad,
   hashMotivo, completarMotivo, guardarMotivo, registrarEnHistorial, enlaceExplorador,
+  enviarTransaccion,
 } from './comun.js';
 
 const { AnchorProvider, Program, Wallet, BN } = anchor;
@@ -126,8 +127,7 @@ export async function otorgarPuntos(idEstudiante, cantidad, motivo) {
   const motivoCompleto = completarMotivo(idEstudiante, cantidad, motivo);
   const hash = hashMotivo(motivoCompleto);
 
-  const firma = await ejecutar(() =>
-    p.methods
+  const tx = await p.methods
       .awardPoints(new BN(cantidad), Array.from(Buffer.from(hash, 'hex')))
       .accountsPartial({
         authority: p.provider.wallet.publicKey,
@@ -140,8 +140,8 @@ export async function otorgarPuntos(idEstudiante, cantidad, motivo) {
         associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .rpc(),
-  );
+      .transaction();
+  const firma = await enviarTransaccion(tx, [llaveUniversidad()]);
 
   guardarMotivo(hash, motivoCompleto);
   registrarEnHistorial({ tipo: 'award', estudiante: idEstudiante, cantidad, hash, firma, fecha: motivoCompleto.fecha });
@@ -151,8 +151,9 @@ export async function otorgarPuntos(idEstudiante, cantidad, motivo) {
 /**
  * El estudiante canjea: firma él (dueño de los puntos) y la universidad paga.
  * El programa quema los puntos y crea el registro `Redemption`.
+ * `alFirmar` recibe la firma antes de enviar (ver enviarTransaccion en comun.js).
  */
-export async function canjearPuntos(idEstudiante, cantidad, { recompensa, comercio }) {
+export async function canjearPuntos(idEstudiante, cantidad, { recompensa, comercio }, { alFirmar } = {}) {
   validarCantidad(cantidad);
   const p = obtenerPrograma();
   const llave = llaveEstudiante(idEstudiante);
@@ -168,8 +169,7 @@ export async function canjearPuntos(idEstudiante, cantidad, { recompensa, comerc
   const estado = await p.account.studentState.fetch(estadoDe(estudiante));
   const canje = canjeDe(estudiante, estado.redemptions);
 
-  const firma = await ejecutar(() =>
-    p.methods
+  const tx = await p.methods
       .redeem(new BN(cantidad), recompensa)
       .accountsPartial({
         payer: p.provider.wallet.publicKey,
@@ -183,9 +183,9 @@ export async function canjearPuntos(idEstudiante, cantidad, { recompensa, comerc
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
-      .signers([llave])
-      .rpc(),
-  );
+      .transaction();
+  // La universidad va primero: es la que paga la comisión.
+  const firma = await enviarTransaccion(tx, [llaveUniversidad(), llave], { alFirmar });
 
   registrarEnHistorial({
     tipo: 'redeem', estudiante: idEstudiante, cantidad, firma, fecha: new Date().toISOString(),

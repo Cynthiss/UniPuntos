@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Connection, Keypair } from '@solana/web3.js';
+import { Connection, Keypair, SendTransactionError } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 // ---------------------------------------------------------------------------
 // Rutas y configuración
@@ -154,4 +155,117 @@ export function canjesDelHistorial(idComercio) {
   return leerJson(ARCHIVO_HISTORIAL, [])
     .filter((h) => h.tipo === 'redeem' && h.comercio === idComercio)
     .map(({ recompensa, cantidad, fecha, firma }) => ({ recompensa, cantidad, fecha, explorador: enlaceExplorador(firma) }));
+}
+
+// ---------------------------------------------------------------------------
+// Envío de transacciones sin cobros dobles
+// ---------------------------------------------------------------------------
+// Problema: si la red tarda, una transacción puede quedar registrada en la
+// cadena aunque nuestra confirmación falle por tiempo de espera. Si en ese
+// caso se reintentara el canje, se quemarían los puntos dos veces.
+//
+// Solución:
+// 1. Se firma ANTES de enviar, así la firma (el id de la transacción) se
+//    conoce desde el principio y se puede guardar.
+// 2. Si la confirmación no llega, se pregunta a la cadena por esa firma.
+// 3. Solo se da por NO registrada cuando su blockhash ya venció: a partir de
+//    ese momento la red la rechazaría, así que nunca podrá registrarse.
+
+/** La red no respondió y no se sabe si la transacción se registró. */
+export class TransaccionIncierta extends Error {
+  constructor(firma) {
+    super('La red no confirmó a tiempo si la transacción se registró. Se verificará en la cadena antes de reintentar.');
+    this.firma = firma;
+    this.incierta = true;
+  }
+}
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Error que garantiza que la transacción NO se registró (no hubo cambios en la cadena).
+function noRegistrada(mensaje) {
+  const error = new Error(mensaje);
+  error.definitiva = true;
+  return error;
+}
+
+/**
+ * Consulta en la cadena qué pasó con una transacción ya firmada.
+ * @returns {'confirmada'|'fallida'|'expirada'|'en-espera'|'incierta'}
+ *   expirada  = su blockhash venció sin registrarse: ya no puede registrarse.
+ *   en-espera = aún puede registrarse (solo con `unaVez`, que no espera).
+ *   incierta  = la red no respondió suficientes veces para saberlo.
+ */
+export async function resultadoDeTransaccion(firma, alturaMaxima, { intervaloMs = 2000, maxErrores = 10, unaVez = false } = {}) {
+  let errores = 0;
+  for (;;) {
+    try {
+      const { value } = await conexion.getSignatureStatus(firma, { searchTransactionHistory: true });
+      if (value?.err) return 'fallida';
+      if (value && ['confirmed', 'finalized'].includes(value.confirmationStatus)) return 'confirmada';
+      if (!value && (await conexion.getBlockHeight('confirmed')) > alturaMaxima) {
+        // El blockhash ya venció. Una última consulta por si se registró justo al final.
+        const { value: final } = await conexion.getSignatureStatus(firma, { searchTransactionHistory: true });
+        if (!final) return 'expirada';
+        if (final.err) return 'fallida';
+      }
+    } catch {
+      if (unaVez || ++errores >= maxErrores) return 'incierta';
+    }
+    if (unaVez) return 'en-espera';
+    await esperar(intervaloMs);
+  }
+}
+
+/**
+ * Firma, envía y confirma una transacción. Si la confirmación no llega,
+ * averigua en la cadena si se registró en vez de suponer que falló.
+ * @param {import('@solana/web3.js').Transaction} tx
+ * @param {Keypair[]} firmantes   el primero paga la comisión (fee payer)
+ * @param {object} [opciones]
+ * @param {(firma: string, alturaMaxima: number) => void} [opciones.alFirmar]
+ *   se llama antes de enviar, para guardar la firma por si algo sale mal.
+ */
+export async function enviarTransaccion(tx, firmantes, { alFirmar, esperaResultado } = {}) {
+  const { blockhash, lastValidBlockHeight } = await conexion.getLatestBlockhash('confirmed');
+  tx.recentBlockhash = blockhash;
+  tx.feePayer ??= firmantes[0].publicKey;
+  tx.sign(...firmantes);
+  const firma = bs58.encode(tx.signature);
+  alFirmar?.(firma, lastValidBlockHeight);
+
+  try {
+    await conexion.sendRawTransaction(tx.serialize());
+  } catch (error) {
+    // La red respondió con un error (p. ej. la simulación falló): no se envió.
+    if (error instanceof SendTransactionError) throw noRegistrada(mensajeDeError(error));
+    // Error de conexión: pudo haber llegado o no. Se averigua más abajo.
+  }
+
+  let confirmacion = null;
+  try {
+    confirmacion = await conexion.confirmTransaction({ signature: firma, blockhash, lastValidBlockHeight }, 'confirmed');
+  } catch {
+    // Tiempo de espera o error de red: no sabemos el resultado todavía.
+  }
+  if (confirmacion) {
+    // Si falla en la cadena, ninguna instrucción se aplica (es atómica).
+    if (confirmacion.value.err) throw noRegistrada(`La transacción falló en la cadena: ${JSON.stringify(confirmacion.value.err)}`);
+    return firma;
+  }
+
+  const resultado = await resultadoDeTransaccion(firma, lastValidBlockHeight, esperaResultado);
+  if (resultado === 'confirmada') return firma;
+  if (resultado === 'fallida') throw noRegistrada('La transacción falló en la cadena.');
+  if (resultado === 'expirada') throw noRegistrada('La transacción no se registró en la cadena. Intenta de nuevo.');
+  throw new TransaccionIncierta(firma);
+}
+
+/** Saca el mensaje legible de un error del programa (Anchor) o de Token-2022. */
+export function mensajeDeError(error) {
+  const logs = error.transactionLogs ?? error.logs ?? [];
+  const anchor = logs.find((l) => l.includes('Error Message: '));
+  if (anchor) return anchor.split('Error Message: ')[1].replace(/\.$/, '');
+  if (logs.some((l) => l.includes('insufficient funds'))) return 'Saldo insuficiente en la cadena.';
+  return error.message;
 }

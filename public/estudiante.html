@@ -190,11 +190,14 @@
 
     const vence = new Date(expira).getTime();
     let consultas = 0;
+    let registrando = false; // la caja ya confirmó y falta el registro en la cadena
     espera = setInterval(async () => {
-      const restante = Math.max(0, vence - Date.now());
-      const mm = String(Math.floor(restante / 60000)).padStart(2, '0');
-      const ss = String(Math.floor((restante % 60000) / 1000)).padStart(2, '0');
-      $('qr-estado').textContent = restante ? `Esperando a la caja · vence en ${mm}:${ss}` : 'El código venció';
+      if (!registrando) {
+        const restante = Math.max(0, vence - Date.now());
+        const mm = String(Math.floor(restante / 60000)).padStart(2, '0');
+        const ss = String(Math.floor((restante % 60000) / 1000)).padStart(2, '0');
+        $('qr-estado').textContent = restante ? `Esperando a la caja · vence en ${mm}:${ss}` : 'El código venció';
+      }
 
       if (++consultas % 3 !== 0) return; // cada 3 segundos
       try {
@@ -204,6 +207,10 @@
           $('listo-detalle').textContent = `Canjeaste ${r.nombre} por ${r.puntos} pts. Los puntos se quemaron en la cadena.`;
           $('modal-espera').classList.add('oculto');
           $('modal-listo').classList.remove('oculto');
+        } else if (c.estado === 'procesando') {
+          // La caja ya confirmó: falta que la transacción quede registrada.
+          registrando = true;
+          $('qr-estado').textContent = 'La caja confirmó · registrando en la cadena…';
         } else if (c.estado === 'vencido') {
           detenerEspera();
         }
