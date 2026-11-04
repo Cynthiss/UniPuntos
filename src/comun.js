@@ -51,8 +51,32 @@ function cargarKeypair(archivo) {
   return Keypair.fromSecretKey(Uint8Array.from(bytes));
 }
 
+// ---------------------------------------------------------------------------
+// Llaves en un servidor (Render u otro hosting)
+// ---------------------------------------------------------------------------
+// En un servidor no existe la carpeta keys/. Las llaves llegan en un solo
+// paquete JSON ({"universidad": [...], "estudiantes/ana": [...], ...}),
+// generado con `npm run exportar-llaves`, por una de estas vías:
+//   - un archivo secreto (en Render: /etc/secrets/llaves.json), o
+//   - la variable de entorno UNIPUNTOS_LLAVES con el JSON completo.
+// Con paquete NO se generan llaves nuevas: una wallet nueva no tendría los
+// puntos de la demo y se perdería al reiniciar el servidor.
+const ARCHIVO_PAQUETE = process.env.UNIPUNTOS_LLAVES_ARCHIVO || '/etc/secrets/llaves.json';
+const paqueteDeLlaves = (() => {
+  if (process.env.UNIPUNTOS_LLAVES) return JSON.parse(process.env.UNIPUNTOS_LLAVES);
+  if (fs.existsSync(ARCHIVO_PAQUETE)) return JSON.parse(fs.readFileSync(ARCHIVO_PAQUETE, 'utf8'));
+  return null;
+})();
+
+function llaveDelPaquete(nombre) {
+  const bytes = paqueteDeLlaves[nombre];
+  if (!bytes) throw new Error(`La llave "${nombre}" no está en el paquete de llaves del servidor.`);
+  return Keypair.fromSecretKey(Uint8Array.from(bytes));
+}
+
 // Carga una llave o, si no existe, la genera (custodia de la demo).
 function llaveCustodiada(carpeta, id) {
+  if (paqueteDeLlaves) return llaveDelPaquete(`${carpeta}/${id}`);
   const archivo = path.join(DIR_LLAVES, carpeta, `${id}.json`);
   if (!fs.existsSync(archivo)) {
     const nueva = Keypair.generate();
@@ -74,6 +98,7 @@ export function enlaceExplorador(firmaOCuenta, tipo = 'tx') {
 // Llaves y datos de prueba
 // ---------------------------------------------------------------------------
 export function llaveUniversidad() {
+  if (paqueteDeLlaves) return llaveDelPaquete('universidad');
   const archivo = path.join(DIR_LLAVES, 'universidad.json');
   if (!fs.existsSync(archivo)) {
     throw new Error('Falta keys/universidad.json. Revisa el README (paso de configuración).');

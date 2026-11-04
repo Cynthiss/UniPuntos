@@ -150,6 +150,22 @@ SOLANA_RPC_URL=http://127.0.0.1:8899 npm start
 
 Antes de volver a devnet, borra `data/*.local.json`, porque el mint local no existe en devnet.
 
+## Desplegar la app web en Render
+
+`render.yaml` deja configurado un servicio web gratuito con el nivel 2 sobre devnet. Las llaves no están en el repositorio: se suben aparte como archivo secreto.
+
+1. Genera el paquete de llaves (queda en `keys/llaves.json`, que git ignora):
+
+   ```bash
+   npm run exportar-llaves
+   ```
+
+2. En [Render](https://render.com), crea una cuenta, conecta tu GitHub y elige **New → Blueprint** con este repositorio. Render lee `render.yaml`.
+3. En el servicio `unipuntos`, ve a **Environment → Secret Files** y agrega un archivo llamado `llaves.json` con el contenido de `keys/llaves.json`. La app lo lee desde `/etc/secrets/llaves.json`.
+4. Despliega. El enlace queda como `https://unipuntos-xxxx.onrender.com`.
+
+En el plan gratuito el servidor se duerme tras 15 minutos sin visitas y tarda cerca de un minuto en despertar. Los archivos de `data/` se borran al reiniciarse: el historial de movimientos de la app se pierde, pero los saldos y canjes siguen en la cadena. Cualquiera con el enlace puede usar la demo, porque no hay inicio de sesión.
+
 ## Cómo funciona el canje (paso a paso)
 
 1. El estudiante elige una recompensa. El backend revisa el saldo y crea un **código de un solo uso** de 8 caracteres, válido 10 minutos. Todavía no se quema nada.

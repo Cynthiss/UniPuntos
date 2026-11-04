@@ -1,0 +1,20 @@
+# Despliegue de la app web en Render (plan gratuito), nivel 2 sobre devnet.
+#
+# Las llaves NO van aquí: se suben a mano en Render como Secret File
+# "llaves.json" (se genera con `npm run exportar-llaves`). La app lo lee
+# desde /etc/secrets/llaves.json.
+services:
+  - type: web
+    name: unipuntos
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node src/server.js
+    healthCheckPath: /api/datos
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: UNIPUNTOS_NIVEL
+        value: "2"
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
