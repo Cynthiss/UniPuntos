@@ -1,6 +1,6 @@
 // inicializar-programa.js — Configuración inicial del nivel 2 (se corre una vez).
 //
-// 1. Inicializa el programa: crea Config y el mint de puntos con reglas FIJAS
+// 1. Inicializa el programa: crea Config y el mint de puntos con las reglas iniciales
 //    (tope por estudiante, presupuesto por período y duración del período).
 // 2. Registra en la cadena los comercios de data/seed.json.
 //

@@ -74,7 +74,7 @@ async function ejecutar(llamada) {
 // Configuración inicial (la corre una vez la universidad)
 // ---------------------------------------------------------------------------
 
-/** Inicializa el programa: crea Config y el mint con sus reglas fijas. */
+/** Inicializa el programa: crea Config y el mint con sus reglas iniciales. */
 export async function inicializarPrograma({ topeEstudiante, presupuesto, segundosPeriodo }) {
   const p = obtenerPrograma();
   if (await p.account.config.fetchNullable(CONFIG)) return null; // ya inicializado
@@ -88,6 +88,20 @@ export async function inicializarPrograma({ topeEstudiante, presupuesto, segundo
         tokenProgram: TOKEN_2022_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
+      .rpc(),
+  );
+}
+
+/**
+ * Cambia el tope por estudiante y el presupuesto por período. Solo la
+ * universidad puede hacerlo; el cambio queda como evento público en la cadena.
+ */
+export async function actualizarLimites({ topeEstudiante, presupuesto }) {
+  const p = obtenerPrograma();
+  return ejecutar(() =>
+    p.methods
+      .updateLimits(new BN(topeEstudiante), new BN(presupuesto))
+      .accountsPartial({ authority: p.provider.wallet.publicKey, config: CONFIG })
       .rpc(),
   );
 }

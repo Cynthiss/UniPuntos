@@ -13,7 +13,8 @@
     "zk:setup": "bash zk/setup.sh",
     "zk": "node zk/cli.js",
     "zk:demo": "node zk/demo.js",
-    "exportar-llaves": "node scripts/exportar-llaves.js"
+    "exportar-llaves": "node scripts/exportar-llaves.js",
+    "actualizar-limites": "node scripts/actualizar-limites.js"
   },
   "repository": {
     "type": "git",

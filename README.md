@@ -199,7 +199,7 @@ El nivel 1 confía en la universidad: con su llave podría emitir puntos sin lí
 
 - **El programa es el mint authority.** El mint lo crea el propio programa y su autoridad es una PDA (`config`). La única forma de emitir es `award_points`, que aplica las reglas.
 - **Dos topes por período:** uno por estudiante (`cap_per_student`) y un presupuesto global (`budget_per_period`). El global impide repartir puntos a muchas wallets para esquivar el tope individual.
-- **El período lo marca el reloj de la cadena**, no la universidad: `period = unix_timestamp / period_seconds`. No hay ninguna instrucción para "avanzar el período", así que la U no puede reiniciar los topes cuando quiera. Los tres valores se fijan en `initialize` y no se pueden cambiar.
+- **El período lo marca el reloj de la cadena**, no la universidad: `period = unix_timestamp / period_seconds`. No hay ninguna instrucción para "avanzar el período", así que la U no puede reiniciar los topes cuando quiera. Los tres valores se fijan en `initialize`. Después, la U puede cambiar el tope por estudiante y el presupuesto con `update_limits` (cada cambio emite el evento público `LimitsUpdated`), pero **la duración del período no se puede cambiar**.
 - **Ninguna instrucción quita puntos sin la firma del estudiante.** La única que quema es `redeem` y exige que el estudiante firme. El mint no tiene *freeze authority* ni *permanent delegate*.
 - **Cada canje queda en la cadena** en una cuenta `Redemption`: quién, en qué comercio, qué recompensa, cuánto y cuándo. Es la base de la liquidación.
 
@@ -220,10 +220,11 @@ El nivel 1 confía en la universidad: con su llave podría emitir puntos sin lí
 | `initialize(cap_per_student, budget_per_period, period_seconds)` | U | Crea `Config` y el mint |
 | `register_merchant(name)` | U | Registra un comercio (activo) |
 | `set_merchant_active(active)` | U | Activa o desactiva un comercio |
+| `update_limits(cap_per_student, budget_per_period)` | U | Cambia el tope por estudiante y el presupuesto (no la duración del período) |
 | `award_points(amount, reason_hash)` | U | Emite puntos respetando los topes; en la cadena solo va el hash del motivo |
 | `redeem(amount, reward_id)` | **estudiante** (+ U como fee payer) | Quema puntos y crea `Redemption` |
 
-Cada instrucción emite un evento (`PointsAwarded`, `PointsRedeemed`, `MerchantUpdated`) que cualquiera puede leer en los logs.
+Cada instrucción emite un evento (`PointsAwarded`, `PointsRedeemed`, `MerchantUpdated`, `LimitsUpdated`) que cualquiera puede leer en los logs.
 
 ### Pruebas
 
@@ -259,7 +260,7 @@ Los scripts y la app son los mismos de los dos niveles. La variable `UNIPUNTOS_N
    cd .. && npm run idl
    ```
 
-2. Inicializarlo una sola vez. Esto fija las reglas (100 puntos por estudiante y 10,000 en total por período de 30 días; se cambian en `scripts/inicializar-programa.js` **antes** de inicializar) y registra los comercios:
+2. Inicializarlo una sola vez. Esto fija las reglas iniciales (100 puntos por estudiante y 10,000 en total por período de 30 días) y registra los comercios. En devnet el tope ya se subió a **200 puntos por estudiante** con `UNIPUNTOS_NIVEL=2 npm run actualizar-limites -- 200`:
 
    ```bash
    UNIPUNTOS_NIVEL=2 npm run inicializar-programa

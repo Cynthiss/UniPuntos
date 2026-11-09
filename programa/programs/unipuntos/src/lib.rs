@@ -4,6 +4,8 @@
 //! - El programa es el mint authority (PDA `config`): no hay otra forma de
 //!   emitir puntos que `award_points`, que respeta los topes por período.
 //! - El período lo marca el reloj de la cadena, no la universidad.
+//! - La U puede cambiar el tope y el presupuesto con `update_limits`, pero
+//!   cada cambio queda como evento público; la duración del período es fija.
 //! - NO existe ninguna instrucción que quite puntos sin la firma del
 //!   estudiante: la única que quema es `redeem`, y exige su firma.
 pub mod constants;
@@ -42,6 +44,10 @@ pub mod unipuntos {
 
     pub fn award_points(ctx: Context<AwardPoints>, amount: u64, reason_hash: [u8; 32]) -> Result<()> {
         crate::instructions::award_points::handle_award_points(ctx, amount, reason_hash)
+    }
+
+    pub fn update_limits(ctx: Context<UpdateLimits>, cap_per_student: u64, budget_per_period: u64) -> Result<()> {
+        crate::instructions::update_limits::handle_update_limits(ctx, cap_per_student, budget_per_period)
     }
 
     pub fn redeem(ctx: Context<Redeem>, amount: u64, reward_id: String) -> Result<()> {

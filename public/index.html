@@ -87,7 +87,7 @@
       ].join('');
 
       document.getElementById('reglas').textContent = nivel2
-        ? `Reglas fijadas en el programa: máximo ${UP.numero(e.topeEstudiante)} puntos por estudiante y ${UP.numero(e.presupuestoPeriodo)} en total cada ${e.diasPorPeriodo} días. Nadie puede cambiarlas.`
+        ? `Reglas fijadas en el programa: máximo ${UP.numero(e.topeEstudiante)} puntos por estudiante y ${UP.numero(e.presupuestoPeriodo)} en total cada ${e.diasPorPeriodo} días. Solo la universidad puede cambiarlas, y cada cambio queda registrado en la cadena.`
         : 'Nivel 1: la universidad emite directamente. Las reglas con topes están en el nivel 2.';
       const enlace = document.getElementById('explorador');
       enlace.href = e.explorador;

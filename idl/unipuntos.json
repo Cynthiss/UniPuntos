@@ -617,6 +617,57 @@
           "type": "bool"
         }
       ]
+    },
+    {
+      "name": "update_limits",
+      "discriminator": [
+        89,
+        37,
+        137,
+        60,
+        75,
+        70,
+        48,
+        194
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "cap_per_student",
+          "type": "u64"
+        },
+        {
+          "name": "budget_per_period",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -674,6 +725,19 @@
     }
   ],
   "events": [
+    {
+      "name": "LimitsUpdated",
+      "discriminator": [
+        160,
+        131,
+        108,
+        76,
+        91,
+        80,
+        118,
+        137
+      ]
+    },
     {
       "name": "MerchantUpdated",
       "discriminator": [
@@ -783,7 +847,7 @@
           {
             "name": "cap_per_student",
             "docs": [
-              "Tope de puntos que un estudiante puede recibir por período."
+              "Tope de puntos que un estudiante puede recibir por período (`update_limits` lo cambia)."
             ],
             "type": "u64"
           },
@@ -834,6 +898,30 @@
           {
             "name": "mint_bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LimitsUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_cap_per_student",
+            "type": "u64"
+          },
+          {
+            "name": "old_budget_per_period",
+            "type": "u64"
+          },
+          {
+            "name": "cap_per_student",
+            "type": "u64"
+          },
+          {
+            "name": "budget_per_period",
+            "type": "u64"
           }
         ]
       }

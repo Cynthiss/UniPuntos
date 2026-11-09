@@ -11,7 +11,7 @@ pub struct Config {
     pub authority: Pubkey,
     /// Mint de puntos (Token-2022, NonTransferable, 0 decimales).
     pub mint: Pubkey,
-    /// Tope de puntos que un estudiante puede recibir por período.
+    /// Tope de puntos que un estudiante puede recibir por período (`update_limits` lo cambia).
     pub cap_per_student: u64,
     /// Presupuesto total de puntos que se pueden emitir por período (todos los estudiantes).
     pub budget_per_period: u64,
@@ -96,6 +96,14 @@ pub struct PointsRedeemed {
     pub reward_id: String,
     pub amount: u64,
     pub redemption: Pubkey,
+}
+
+#[event]
+pub struct LimitsUpdated {
+    pub old_cap_per_student: u64,
+    pub old_budget_per_period: u64,
+    pub cap_per_student: u64,
+    pub budget_per_period: u64,
 }
 
 #[event]

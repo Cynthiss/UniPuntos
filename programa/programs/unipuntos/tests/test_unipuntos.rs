@@ -344,3 +344,49 @@ fn los_puntos_no_se_pueden_transferir() {
     assert!(logs.contains("Transfer is disabled for this mint"), "{logs}");
     assert_eq!(e.saldo(&ana.pubkey()), 50);
 }
+
+fn ix_limites(autoridad: &Pubkey, config: Pubkey, tope: u64, presupuesto: u64) -> Instruction {
+    Instruction::new_with_bytes(
+        unipuntos::id(),
+        &unipuntos::instruction::UpdateLimits { cap_per_student: tope, budget_per_period: presupuesto }.data(),
+        unipuntos::accounts::UpdateLimits { authority: *autoridad, config }.to_account_metas(None),
+    )
+}
+
+#[test]
+fn la_universidad_puede_subir_el_tope_y_se_aplica_de_inmediato() {
+    let mut e = Entorno::nuevo();
+    let ana = Keypair::new().pubkey();
+    e.otorgar(&ana, 100).unwrap();
+    assert!(e.otorgar(&ana, 1).is_err(), "con tope 100 no puede recibir más");
+
+    let universidad = e.universidad.insecure_clone();
+    e.enviar(ix_limites(&universidad.pubkey(), e.config, 200, PRESUPUESTO), &[&universidad]).unwrap();
+
+    let config: Config = e.leer(&e.config);
+    assert_eq!(config.cap_per_student, 200);
+    assert_eq!(config.period_seconds, PERIODO, "la duración del período no cambia");
+
+    // En el mismo período ya puede llegar a 200, pero no pasarse.
+    e.otorgar(&ana, 100).unwrap();
+    assert_eq!(e.saldo(&ana), 200);
+    let logs = e.otorgar(&ana, 1).unwrap_err();
+    assert!(logs.contains("StudentCapExceeded"), "{logs}");
+}
+
+#[test]
+fn solo_la_universidad_puede_cambiar_los_limites() {
+    let mut e = Entorno::nuevo();
+    let impostor = Keypair::new();
+    e.svm.airdrop(&impostor.pubkey(), 1_000_000_000).unwrap();
+
+    let logs = e.enviar(ix_limites(&impostor.pubkey(), e.config, 1_000_000, 1_000_000), &[&impostor]).unwrap_err();
+    assert!(logs.contains("Unauthorized"), "{logs}");
+
+    let universidad = e.universidad.insecure_clone();
+    let logs = e.enviar(ix_limites(&universidad.pubkey(), e.config, 0, PRESUPUESTO), &[&universidad]).unwrap_err();
+    assert!(logs.contains("InvalidAmount"), "{logs}");
+
+    let config: Config = e.leer(&e.config);
+    assert_eq!(config.cap_per_student, TOPE_ESTUDIANTE);
+}
