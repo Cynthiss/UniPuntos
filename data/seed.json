@@ -90,5 +90,7 @@
       "ana",
       "carla"
     ]
-  }
+  },
+  "quetzalesPorPunto": 0.25,
+  "_notaValor": "1 punto = Q0.25 (40 pts = Q10 de descuento). Se usa para la liquidación con los comercios."
 }

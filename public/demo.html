@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Demo · UniPuntos</title>
+  <meta name="theme-color" content="#1d5c47">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="estilos.css">
+  <style>
+    /* Modo demo: cada actor en su propio teléfono, lado a lado. */
+    main.demo { max-width: none; }
+    .telefonos { display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; margin-top: 8px; }
+    .actor { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .actor h2 { display: flex; align-items: center; gap: 8px; }
+    .actor p { margin: -6px 0 0; font-size: .85rem; color: var(--suave); max-width: 340px; text-align: center; }
+    /* El marco se adapta al ancho disponible y mantiene la proporción de un teléfono. */
+    .telefono {
+      position: relative; width: min(375px, calc(100vw - 32px)); aspect-ratio: 375 / 780;
+      border-radius: 48px; padding: 40px 12px 14px; background: #0d0f0e;
+      box-shadow: 0 0 0 2px #2b2f2c, 0 24px 60px rgb(0 0 0 / 25%);
+    }
+    /* La "isla" va en la franja superior, fuera de la pantalla, para no tapar la app. */
+    .telefono::before {
+      content: ""; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 96px; height: 18px; border-radius: 999px; background: #262a27;
+    }
+    .telefono iframe { display: block; width: 100%; height: 100%; border: 0; border-radius: 10px 10px 34px 34px; background: var(--fondo); }
+  </style>
+</head>
+<body data-pagina="demo">
+<main class="demo">
+  <div class="encabezado" style="text-align:center">
+    <h1>Modo demo</h1>
+    <p>Los tres actores, cada uno en su teléfono. Pide un canje a la izquierda y confírmalo en la caja.</p>
+  </div>
+
+  <div class="telefonos">
+    <section class="actor">
+      <h2>🎓 Estudiante</h2>
+      <p>Ve su saldo y genera el QR de un solo uso.</p>
+      <div class="telefono"><iframe src="/estudiante.html" title="Vista del estudiante"></iframe></div>
+    </section>
+    <section class="actor">
+      <h2>🧾 Comercio</h2>
+      <p>Escribe o escanea el código; no ve quién es el estudiante.</p>
+      <div class="telefono"><iframe src="/comercio.html" title="Vista de la caja del comercio"></iframe></div>
+    </section>
+    <section class="actor">
+      <h2>🏛️ Universidad</h2>
+      <p>Otorga puntos y prepara la liquidación con los comercios.</p>
+      <div class="telefono"><iframe src="/universidad.html" title="Vista de la universidad"></iframe></div>
+    </section>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

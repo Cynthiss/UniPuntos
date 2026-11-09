@@ -153,9 +153,10 @@
           <span class="icono ${gana ? 'ok' : ''}">${gana ? '＋' : UP.emoji(h.recompensa)}</span>
           <div class="texto">
             <strong>${UP.esc(titulo)}</strong>
-            <small>${UP.fecha(h.fecha)} · <a href="${h.explorador}" target="_blank" rel="noopener">ver ↗</a></small>
+            <small>${gana ? 'Recibido' : 'Canje'} · ${UP.fecha(h.fecha)} · <a href="${h.explorador}" target="_blank" rel="noopener">ver ↗</a></small>
           </div>
-          <span class="cantidad ${gana ? 'mas' : 'menos'}">${gana ? '+' : '−'}${h.cantidad}</span>
+          <!-- Sin signo menos: el saldo nunca es negativo; el canje se rotula como tal. -->
+          <span class="cantidad ${gana ? 'mas' : ''}">${gana ? '+' : ''}${h.cantidad} pts</span>
         </li>`;
     }).join('');
   }

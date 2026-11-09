@@ -29,7 +29,7 @@ import QRCode from 'qrcode';
 import {
   RAIZ, NIVEL, seed, canjearPuntos, consultarSaldo, consultarEmision,
   historialDe, canjesDeComercio, llaveEstudiante, enlaceExplorador,
-  resultadoDeTransaccion, registrarEnHistorial,
+  resultadoDeTransaccion, registrarEnHistorial, otorgarPuntos,
 } from './puntos.js';
 
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -125,6 +125,10 @@ app.get('/api/datos', (_req, res) => {
     estudiantes: seed.estudiantes.map(({ id, nombre }) => ({ id, nombre })),
     comercios: seed.comercios,
     catalogo: seed.catalogo,
+    conductas: seed.conductas,
+    quetzalesPorPunto: seed.quetzalesPorPunto,
+    // La vista de la universidad pide una clave solo si el servidor tiene una configurada.
+    pideClave: Boolean(process.env.UNIPUNTOS_CLAVE_UNIVERSIDAD),
   });
 });
 
@@ -241,6 +245,46 @@ app.post('/api/codigos/:codigo/confirmar', async (req, res, next) => {
 app.get('/api/comercios/:id/canjes', async (req, res, next) => {
   try {
     res.json({ canjes: await canjesDeComercio(req.params.id) });
+  } catch (e) { next(e); }
+});
+
+// ---------------------------------------------------------------------------
+// Vista de la universidad
+// ---------------------------------------------------------------------------
+
+// Saldos de todos los estudiantes y liquidación del mes con cada comercio.
+// Solo se reembolsan los canjes que financia la universidad; las promociones
+// que financia el comercio no generan reembolso.
+app.get('/api/universidad/resumen', async (_req, res, next) => {
+  try {
+    const estudiantes = await Promise.all(seed.estudiantes.map(async ({ id, nombre }) => ({
+      id, nombre, saldo: await consultarSaldo(id),
+    })));
+    const financia = (idRecompensa) => seed.catalogo.find((r) => r.id === idRecompensa)?.financia;
+    const mes = new Date().toISOString().slice(0, 7); // la liquidación es mensual: solo el mes en curso
+    const comercios = await Promise.all(seed.comercios.map(async ({ id, nombre }) => {
+      const canjes = (await canjesDeComercio(id)).filter((c) => c.fecha.startsWith(mes));
+      const puntos = canjes.reduce((s, c) => s + c.cantidad, 0);
+      const puntosU = canjes.filter((c) => financia(c.recompensa) === 'universidad').reduce((s, c) => s + c.cantidad, 0);
+      return { id, nombre, canjes: canjes.length, puntos, puntosU, reembolso: puntosU * seed.quetzalesPorPunto };
+    }));
+    res.json({ estudiantes, comercios });
+  } catch (e) { next(e); }
+});
+
+// La universidad otorga puntos por una conducta del catálogo. Si el servidor
+// tiene UNIPUNTOS_CLAVE_UNIVERSIDAD (p. ej. en Render), se exige esa clave.
+app.post('/api/universidad/premios', async (req, res, next) => {
+  const clave = process.env.UNIPUNTOS_CLAVE_UNIVERSIDAD;
+  if (clave && req.get('x-clave-universidad') !== clave) {
+    return res.status(401).json({ error: 'Clave de la universidad incorrecta.' });
+  }
+  const { estudiante, conducta: idConducta } = req.body ?? {};
+  const conducta = seed.conductas.find((c) => c.id === idConducta);
+  if (!conducta) return res.status(400).json({ error: 'Conducta no válida.' });
+  try {
+    const { firma } = await otorgarPuntos(estudiante, conducta.puntos, { conducta: conducta.id });
+    res.json({ ok: true, puntos: conducta.puntos, explorador: enlaceExplorador(firma) });
   } catch (e) { next(e); }
 });
 

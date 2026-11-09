@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Universidad · UniPuntos</title>
+  <meta name="theme-color" content="#1d5c47">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icono.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body data-pagina="universidad">
+<main>
+  <div class="encabezado">
+    <small>Panel de la</small>
+    <h1>Universidad</h1>
+    <p>Otorga puntos, revisa saldos y prepara la liquidación con los comercios.</p>
+  </div>
+
+  <div class="dos-columnas">
+    <div>
+      <section class="tarjeta">
+        <h2 style="margin-bottom:14px">Otorgar puntos</h2>
+        <label class="etiqueta" for="estudiante">Estudiante</label>
+        <select id="estudiante" class="selector" style="width:100%;max-width:100%"></select>
+        <label class="etiqueta" for="conducta" style="margin-top:12px">Conducta validada</label>
+        <select id="conducta" class="selector" style="width:100%;max-width:100%"></select>
+        <div id="campo-clave" class="oculto" style="margin-top:12px">
+          <label class="etiqueta" for="clave">Clave de la universidad</label>
+          <input id="clave" type="password" class="selector" style="width:100%;max-width:100%;background-image:none" autocomplete="off">
+        </div>
+        <button class="boton ancho" id="otorgar" style="margin-top:16px">Otorgar puntos</button>
+        <p class="suave" style="font-size:.82rem;margin:12px 0 0">
+          En la cadena solo va la cantidad y un hash del motivo. El programa rechaza el premio si pasa el tope del estudiante o el presupuesto del período.
+        </p>
+      </section>
+
+      <section class="seccion">
+        <h2 style="margin-bottom:12px">Saldos de estudiantes</h2>
+        <div class="tarjeta"><ul class="lista" id="saldos"></ul></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="seccion" style="margin-top:0">
+        <div class="tarjeta">
+          <div class="fila-entre" style="margin-bottom:4px">
+            <h2>Liquidación del mes</h2>
+            <span class="insignia marca num" id="total-reembolso"></span>
+          </div>
+          <p class="suave" style="font-size:.82rem;margin:0 0 14px" id="nota-valor"></p>
+          <ul class="lista" id="liquidacion"></ul>
+        </div>
+      </section>
+
+      <section class="seccion">
+        <h2 style="margin-bottom:12px">Reglas en la cadena</h2>
+        <div class="tarjeta"><ul class="lista" id="reglas"></ul></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  let datos;
+  const q = (n) => 'Q' + Number(n).toLocaleString('es-GT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  async function iniciar() {
+    datos = await UP.api('/api/datos');
+    $('estudiante').innerHTML = datos.estudiantes.map((e) => `<option value="${e.id}">${UP.esc(e.nombre)}</option>`).join('');
+    $('conducta').innerHTML = datos.conductas.map((c) => `<option value="${c.id}">${UP.esc(c.nombre)} · ${c.puntos} pts</option>`).join('');
+    if (datos.pideClave) $('campo-clave').classList.remove('oculto');
+    $('nota-valor').textContent = `1 punto = ${q(datos.quetzalesPorPunto)}. Solo se reembolsan las recompensas que financia la universidad.`;
+    $('otorgar').addEventListener('click', otorgar);
+    cargar();
+  }
+
+  function esqueletos() {
+    for (const id of ['saldos', 'liquidacion', 'reglas']) {
+      $(id).innerHTML = '<li><div class="esqueleto" style="height:40px;flex:1"></div></li>';
+    }
+  }
+
+  async function cargar() {
+    esqueletos();
+    try {
+      const [resumen, emision] = await Promise.all([UP.api('/api/universidad/resumen'), UP.api('/api/emision')]);
+      pintarSaldos(resumen.estudiantes);
+      pintarLiquidacion(resumen.comercios);
+      pintarReglas(emision);
+    } catch (error) {
+      UP.aviso(UP.esc(error.message), 'error');
+    }
+  }
+
+  function pintarSaldos(estudiantes) {
+    $('saldos').innerHTML = estudiantes.map((e) => `
+      <li>
+        <span class="icono">🎓</span>
+        <div class="texto"><strong>${UP.esc(e.nombre)}</strong><small>${e.saldo ? 'Tiene puntos para canjear' : 'Sin puntos todavía'}</small></div>
+        <span class="cantidad num">${UP.numero(e.saldo)} pts</span>
+      </li>`).join('');
+  }
+
+  function pintarLiquidacion(comercios) {
+    const total = comercios.reduce((s, c) => s + c.reembolso, 0);
+    $('total-reembolso').textContent = `Total ${q(total)}`;
+    $('liquidacion').innerHTML = comercios.map((c) => `
+      <li>
+        <span class="icono">${UP.emoji(c.id)}</span>
+        <div class="texto">
+          <strong>${UP.esc(c.nombre)}</strong>
+          <small>${c.canjes} canjes · ${UP.numero(c.puntos)} pts · ${UP.numero(c.puntosU)} pts financiados por la U</small>
+        </div>
+        <span class="cantidad num">${q(c.reembolso)}</span>
+      </li>`).join('');
+  }
+
+  function pintarReglas(e) {
+    const filas = e.nivel === 2
+      ? [
+          ['🎯', 'Tope por estudiante', `${UP.numero(e.topeEstudiante)} pts cada ${e.diasPorPeriodo} días`],
+          ['💰', 'Presupuesto del período', `${UP.numero(e.otorgadoEnPeriodo)} de ${UP.numero(e.presupuestoPeriodo)} pts usados`],
+          ['📈', 'Otorgados en total', `${UP.numero(e.totalOtorgado)} pts`],
+          ['🔥', 'Canjeados en total', `${UP.numero(e.totalCanjeado)} pts`],
+        ]
+      : [['ℹ️', 'Nivel 1', 'La universidad emite sin tope; las reglas están en el nivel 2']];
+    $('reglas').innerHTML = filas.map(([icono, titulo, valor]) => `
+      <li><span class="icono">${icono}</span><div class="texto"><strong>${titulo}</strong><small>${valor}</small></div></li>`).join('')
+      + `<li><span class="icono">🔎</span><div class="texto"><strong>Verificable por cualquiera</strong><small><a href="${e.explorador}" target="_blank" rel="noopener">Ver el mint en la cadena ↗</a></small></div></li>`;
+  }
+
+  async function otorgar() {
+    const boton = $('otorgar');
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span> Registrando en la cadena…';
+    try {
+      const r = await fetch('/api/universidad/premios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-clave-universidad': $('clave').value },
+        body: JSON.stringify({ estudiante: $('estudiante').value, conducta: $('conducta').value }),
+      });
+      const datosR = await r.json();
+      if (!r.ok) throw new Error(datosR.error || 'No se pudo otorgar.');
+      const nombre = $('estudiante').selectedOptions[0].textContent;
+      UP.aviso(`✓ ${datosR.puntos} pts para ${UP.esc(nombre)}. <a href="${datosR.explorador}" target="_blank" rel="noopener">Ver transacción</a>`, 'ok', 6);
+      cargar();
+    } catch (error) {
+      UP.aviso(UP.esc(error.message), 'error', 6);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = 'Otorgar puntos';
+    }
+  }
+
+  iniciar().catch((e) => UP.aviso(UP.esc(e.message), 'error'));
+</script>
+</body>
+</html>

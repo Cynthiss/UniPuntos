@@ -56,6 +56,8 @@ public/           App web (adaptable al celular e instalable como app)
   index.html      Inicio: estadísticas leídas de la cadena y garantías
   estudiante.html Saldo, recompensas, movimientos y QR que se actualiza al confirmarse
   comercio.html   Caja: ingresa o escanea el código y confirma el canje
+  universidad.html Universidad: otorga puntos, ve saldos y la liquidación del mes
+  demo.html       Modo demo: estudiante, caja y universidad lado a lado en marcos de teléfono
   app.js          Navegación, avisos y utilidades compartidas
   estilos.css     Estilos (modo claro y oscuro)
 data/
@@ -162,7 +164,8 @@ Antes de volver a devnet, borra `data/*.local.json`, porque el mint local no exi
 
 2. En [Render](https://render.com), crea una cuenta, conecta tu GitHub y elige **New → Blueprint** con este repositorio. Render lee `render.yaml`.
 3. En el servicio `unipuntos`, ve a **Environment → Secret Files** y agrega un archivo llamado `llaves.json` con el contenido de `keys/llaves.json`. La app lo lee desde `/etc/secrets/llaves.json`.
-4. Despliega. El enlace queda como `https://unipuntos-xxxx.onrender.com`.
+4. Render pide el valor de `UNIPUNTOS_CLAVE_UNIVERSIDAD`: elige una clave. La vista de la universidad la pide para otorgar puntos, así que en el enlace público nadie más puede dar puntos.
+5. Despliega. El enlace queda como `https://unipuntos-xxxx.onrender.com`; el modo demo está en `/demo.html`.
 
 En el plan gratuito el servidor se duerme tras 15 minutos sin visitas y tarda cerca de un minuto en despertar. Los archivos de `data/` se borran al reiniciarse: el historial de movimientos de la app se pierde, pero los saldos y canjes siguen en la cadena. Cualquiera con el enlace puede usar la demo, porque no hay inicio de sesión.
 

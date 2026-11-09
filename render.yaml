@@ -18,3 +18,7 @@ services:
         value: "2"
       - key: SOLANA_RPC_URL
         value: https://api.devnet.solana.com
+      # Clave para otorgar puntos desde la vista de la universidad. Render la pide al
+      # crear el servicio (sync: false = no se guarda en el repositorio).
+      - key: UNIPUNTOS_CLAVE_UNIVERSIDAD
+        sync: false
