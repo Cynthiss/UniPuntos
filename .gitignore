@@ -18,5 +18,10 @@ data/*.local.json
 # macOS
 .DS_Store
 
-# Nivel 3: artefactos de la ceremonia (se regeneran con npm run zk:setup)
-zk/build/
+# Nivel 3: artefactos de la ceremonia (se regeneran con npm run zk:setup).
+# Se suben solo los que necesita el servidor para probar y verificar (Render no
+# tiene circom). Son públicos por diseño: no contienen secretos.
+zk/build/*
+!zk/build/canje_privado_js/
+!zk/build/canje_final.zkey
+!zk/build/verification_key.json

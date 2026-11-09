@@ -76,12 +76,24 @@ const archivoPromo = (idPromo, mes) => path.join(RAIZ, 'data', `zk-promo-${idPro
 // Estudiante: secreto y compromiso
 // ---------------------------------------------------------------------------
 
+// En un servidor (Render) los secretos llegan en el mismo paquete de llaves
+// que usa src/comun.js, con nombres "zk/ana", "zk/bruno"... (ver exportar-llaves).
+const ARCHIVO_PAQUETE = process.env.UNIPUNTOS_LLAVES_ARCHIVO || '/etc/secrets/llaves.json';
+const paquete = (() => {
+  if (process.env.UNIPUNTOS_LLAVES) return JSON.parse(process.env.UNIPUNTOS_LLAVES);
+  return leerJson(ARCHIVO_PAQUETE, null);
+})();
+
 // DEMO (custodia): el secreto se genera y guarda aquí. En producción se genera
 // en el celular del estudiante y la universidad solo recibe el compromiso.
+// Si el paquete del servidor no trae el secreto, se genera uno local: sigue
+// funcionando, pero hay que volver a publicar la promo cuando cambie.
 function secretoDe(idEstudiante) {
   if (!seed.estudiantes.some((e) => e.id === idEstudiante)) {
     throw new Error(`Estudiante "${idEstudiante}" no existe.`);
   }
+  const delPaquete = paquete?.[`zk/${idEstudiante}`];
+  if (delPaquete) return BigInt(delPaquete.secreto);
   const archivo = path.join(DIR_SECRETOS, `${idEstudiante}.json`);
   if (!fs.existsSync(archivo)) {
     // 31 bytes aleatorios: siempre menor que P.
@@ -245,9 +257,53 @@ export async function verificarCanje({ promo: idPromo, mes, proof, publicSignals
     return { ok: false, motivo: 'La prueba no es válida.' };
   }
 
-  usados[clave] = [...(usados[clave] ?? []), nullifierHash];
-  escribirJson(ARCHIVO_NULLIFIERS, usados);
+  // Se vuelve a leer: otra verificación pudo registrar el mismo nullifier
+  // mientras esta esperaba a groth16.verify.
+  const actuales = leerJson(ARCHIVO_NULLIFIERS, {});
+  if ((actuales[clave] ?? []).includes(nullifierHash)) {
+    return { ok: false, motivo: 'Esta promoción ya fue canjeada con esta credencial (doble canje).' };
+  }
+  actuales[clave] = [...(actuales[clave] ?? []), nullifierHash];
+  escribirJson(ARCHIVO_NULLIFIERS, actuales);
   return { ok: true, nullifierHash };
+}
+
+// ---------------------------------------------------------------------------
+// Consultas para la app web
+// ---------------------------------------------------------------------------
+
+/** Mes de la promo vigente: el último mes con registro de pagos puntuales. */
+export function mesVigente() {
+  return Object.keys(seed.pagosPuntuales).filter((k) => /^\d{4}-\d{2}$/.test(k)).sort().at(-1);
+}
+
+const estaPublicada = (idPromo, mes) => fs.existsSync(archivoPromo(idPromo, mes));
+const nullifiersDe = (idPromo, mes) => leerJson(ARCHIVO_NULLIFIERS, {})[`${idPromo}:${mes}`] ?? [];
+
+/**
+ * Resumen público de la promo: raíz, cuántos elegibles y cuántos canjes.
+ * Nadie (ni la universidad) puede saber desde aquí QUIÉN canjeó.
+ */
+export function resumenPromo(idPromo, mes) {
+  const promo = buscarPromo(idPromo);
+  const base = { ...promo, mes, publicada: estaPublicada(idPromo, mes), canjes: nullifiersDe(idPromo, mes).length };
+  if (!base.publicada) return base;
+  const publicada = promoPublicada(idPromo, mes);
+  return { ...base, raiz: publicada.raiz, elegibles: publicada.compromisos.length };
+}
+
+/**
+ * Lo que ve el propio estudiante: si califica y si ya usó la promo.
+ * DEMO: lo calcula el servidor porque custodia el secreto; en producción lo
+ * calcula el celular del estudiante con datos públicos.
+ */
+export async function estadoEstudiante(idEstudiante, idPromo, mes) {
+  if (!estaPublicada(idPromo, mes)) return { publicada: false };
+  const promo = promoPublicada(idPromo, mes);
+  const secreto = secretoDe(idEstudiante);
+  const elegible = promo.compromisos.includes((await hash([secreto])).toString());
+  const nullifier = (await hash([secreto, BigInt(promo.promoId)])).toString();
+  return { publicada: true, elegible, usada: nullifiersDe(idPromo, mes).includes(nullifier) };
 }
 
 /** Borra los nullifiers de una promo (solo para repetir la demo). */

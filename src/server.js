@@ -4,6 +4,11 @@
 // Páginas:
 //   /estudiante.html  saldo, historial, catálogo y QR de un solo uso
 //   /comercio.html    el comercio ingresa/escanea el código y confirma el canje
+//   /universidad.html la U otorga puntos, liquida y publica la promo privada
+//   /demo.html        los tres actores en marcos de teléfono
+//
+// Además, la promo privada del nivel 3 (rutas /api/zk/...): el estudiante
+// demuestra con una prueba de conocimiento cero que pagó puntual, sin decir quién es.
 //
 // Flujo del canje:
 //   1. El estudiante elige una recompensa → el backend crea un código de un
@@ -31,6 +36,7 @@ import {
   historialDe, canjesDeComercio, llaveEstudiante, enlaceExplorador,
   resultadoDeTransaccion, registrarEnHistorial, otorgarPuntos,
 } from './puntos.js';
+import * as zk from '../zk/zk.js';
 
 const PUERTO = Number(process.env.PORT) || 3000;
 const MINUTOS_VALIDEZ = 10;
@@ -275,10 +281,7 @@ app.get('/api/universidad/resumen', async (_req, res, next) => {
 // La universidad otorga puntos por una conducta del catálogo. Si el servidor
 // tiene UNIPUNTOS_CLAVE_UNIVERSIDAD (p. ej. en Render), se exige esa clave.
 app.post('/api/universidad/premios', async (req, res, next) => {
-  const clave = process.env.UNIPUNTOS_CLAVE_UNIVERSIDAD;
-  if (clave && req.get('x-clave-universidad') !== clave) {
-    return res.status(401).json({ error: 'Clave de la universidad incorrecta.' });
-  }
+  if (!exigirClave(req, res)) return;
   const { estudiante, conducta: idConducta } = req.body ?? {};
   const conducta = seed.conductas.find((c) => c.id === idConducta);
   if (!conducta) return res.status(400).json({ error: 'Conducta no válida.' });
@@ -288,11 +291,125 @@ app.post('/api/universidad/premios', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// ---------------------------------------------------------------------------
+// Nivel 3: promo privada con conocimiento cero (Café 2x1 para quien pagó puntual)
+// ---------------------------------------------------------------------------
+// El estudiante genera una prueba de que está en la lista de quienes pagaron
+// puntual, sin decir quién es. La prueba se guarda bajo un código de 8
+// caracteres (el QR) que NO lleva el nombre del estudiante: el comercio solo
+// ve la promo y si la prueba es válida.
+// DEMO: la prueba se genera en el servidor porque custodia el secreto del
+// estudiante. En producción se genera en su celular y viaja completa en el QR.
+const PROMO_ZK = seed.promosPrivadas[0].id;
+const ARCHIVO_CODIGOS_ZK = path.join(RAIZ, 'data', 'zk-codigos.local.json');
+const codigosZk = fs.existsSync(ARCHIVO_CODIGOS_ZK) ? JSON.parse(fs.readFileSync(ARCHIVO_CODIGOS_ZK, 'utf8')) : {};
+const guardarCodigosZk = () => fs.writeFileSync(ARCHIVO_CODIGOS_ZK, JSON.stringify(codigosZk));
+
+function exigirClave(req, res) {
+  const clave = process.env.UNIPUNTOS_CLAVE_UNIVERSIDAD;
+  if (clave && req.get('x-clave-universidad') !== clave) {
+    res.status(401).json({ error: 'Clave de la universidad incorrecta.' });
+    return false;
+  }
+  return true;
+}
+
+const estadoCodigoZk = (c) => (c.estado === 'pendiente' && Date.now() > new Date(c.expira).getTime() ? 'vencido' : c.estado);
+
+// Resumen público de la promo (raíz, elegibles, canjes; nunca nombres).
+app.get('/api/zk/promo', (_req, res, next) => {
+  try { res.json(zk.resumenPromo(PROMO_ZK, zk.mesVigente())); } catch (e) { next(e); }
+});
+
+// La universidad publica la lista sellada (árbol de Merkle) del mes.
+app.post('/api/zk/publicar', async (req, res, next) => {
+  if (!exigirClave(req, res)) return;
+  try {
+    await zk.publicarPromo(PROMO_ZK, zk.mesVigente());
+    res.json(zk.resumenPromo(PROMO_ZK, zk.mesVigente()));
+  } catch (e) { next(e); }
+});
+
+// Solo para repetir la demo: borra los canjes registrados de la promo.
+app.post('/api/zk/reiniciar', (req, res, next) => {
+  if (!exigirClave(req, res)) return;
+  try {
+    zk.reiniciarNullifiers(PROMO_ZK, zk.mesVigente());
+    res.json(zk.resumenPromo(PROMO_ZK, zk.mesVigente()));
+  } catch (e) { next(e); }
+});
+
+// Lo que ve el estudiante: si califica y si ya usó la promo.
+app.get('/api/zk/estudiantes/:id', async (req, res, next) => {
+  try {
+    const mes = zk.mesVigente();
+    res.json({ ...zk.resumenPromo(PROMO_ZK, mes), ...(await zk.estadoEstudiante(req.params.id, PROMO_ZK, mes)) });
+  } catch (e) { next(e); }
+});
+
+// El estudiante genera su prueba. `intentarIgual` (demo) muestra que quien no
+// califica no puede fabricar una prueba: el circuito la rechaza.
+app.post('/api/zk/pruebas', async (req, res) => {
+  const { estudiante, intentarIgual } = req.body ?? {};
+  try {
+    const prueba = await zk.generarPrueba(estudiante, PROMO_ZK, zk.mesVigente(), { trampa: Boolean(intentarIgual) });
+    const codigo = nuevoCodigo();
+    const expira = new Date(Date.now() + MINUTOS_VALIDEZ * 60_000).toISOString();
+    codigosZk[codigo] = { prueba, estado: 'pendiente', expira }; // sin el nombre del estudiante
+    guardarCodigosZk();
+    const qr = await QRCode.toDataURL(codigo, { margin: 1, width: 280 });
+    res.json({ codigo, qr, expira, promo: zk.buscarPromo(PROMO_ZK), tamano: JSON.stringify(prueba).length });
+  } catch (e) {
+    const error = e.message.startsWith('El circuito rechazó')
+      ? 'El circuito rechazó la prueba: no estás en la lista de quienes pagaron puntual. Nadie puede fabricar una prueba falsa.'
+      : e.message;
+    res.status(400).json({ error });
+  }
+});
+
+// El comercio consulta un código de promo privada.
+app.get('/api/zk/codigos/:codigo', (req, res) => {
+  const c = codigosZk[req.params.codigo.toUpperCase()];
+  if (!c) return res.status(404).json({ error: 'Código no existe.' });
+  res.json({ promo: zk.buscarPromo(c.prueba.promo), mes: c.prueba.mes, estado: estadoCodigoZk(c), motivo: c.motivo });
+});
+
+// El comercio verifica la prueba. Solo ve: válida o no, y una huella anónima.
+app.post('/api/zk/codigos/:codigo/verificar', async (req, res, next) => {
+  const codigo = req.params.codigo.toUpperCase();
+  const c = codigosZk[codigo];
+  if (!c) return res.status(404).json({ error: 'Código no existe.' });
+  const promo = zk.buscarPromo(c.prueba.promo);
+  if (req.body?.comercio !== promo.comercio) return res.status(403).json({ error: 'Esta promo es de otro comercio.' });
+  const estado = estadoCodigoZk(c);
+  if (estado === 'vencido') return res.status(410).json({ error: 'El código venció. Pide al estudiante uno nuevo.' });
+  if (estado !== 'pendiente') return res.status(409).json({ error: 'Este código ya fue usado.' });
+  c.estado = 'verificando';
+  try {
+    const inicio = Date.now();
+    const r = await zk.verificarCanje(c.prueba);
+    Object.assign(c, { estado: r.ok ? 'usado' : 'rechazado', motivo: r.motivo });
+    guardarCodigosZk();
+    res.json({ ...r, promo, ms: Date.now() - inicio });
+  } catch (e) {
+    c.estado = 'pendiente';
+    next(e);
+  }
+});
+
 // Errores: se responde con un mensaje legible.
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: err.message });
 });
+
+// La promo del mes se publica al arrancar si aún no existe (en Render el disco
+// se borra al reiniciar). La universidad puede volver a publicarla desde su vista.
+if (!zk.resumenPromo(PROMO_ZK, zk.mesVigente()).publicada) {
+  zk.publicarPromo(PROMO_ZK, zk.mesVigente())
+    .then(() => console.log(`Promo privada ${PROMO_ZK} (${zk.mesVigente()}) publicada.`))
+    .catch((e) => console.error('No se pudo publicar la promo privada:', e.message));
+}
 
 app.listen(PUERTO, () => {
   console.log(`UniPuntos (nivel ${NIVEL}) corriendo en http://localhost:${PUERTO}`);

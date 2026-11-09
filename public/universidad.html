@@ -54,6 +54,24 @@
       </section>
 
       <section class="seccion">
+        <div class="fila-entre" style="margin-bottom:12px">
+          <h2>Promo privada</h2>
+          <span class="insignia marca">🕶️ ZK</span>
+        </div>
+        <div class="tarjeta">
+          <ul class="lista" id="promo-zk"></ul>
+          <div class="rejilla" style="grid-template-columns:1fr 1fr;margin-top:12px">
+            <button class="boton chico" id="zk-publicar">Publicar lista del mes</button>
+            <button class="boton chico secundario" id="zk-reiniciar">Reiniciar demo</button>
+          </div>
+          <p class="suave" style="font-size:.82rem;margin:12px 0 0">
+            Se publica solo la raíz de un árbol con los compromisos de quienes pagaron puntual: sin nombres ni montos.
+            Ni la universidad puede saber quién canjeó la promo.
+          </p>
+        </div>
+      </section>
+
+      <section class="seccion">
         <h2 style="margin-bottom:12px">Reglas en la cadena</h2>
         <div class="tarjeta"><ul class="lista" id="reglas"></ul></div>
       </section>
@@ -74,11 +92,13 @@
     if (datos.pideClave) $('campo-clave').classList.remove('oculto');
     $('nota-valor').textContent = `1 punto = ${q(datos.quetzalesPorPunto)}. Solo se reembolsan las recompensas que financia la universidad.`;
     $('otorgar').addEventListener('click', otorgar);
+    $('zk-publicar').addEventListener('click', (e) => accionZk(e.currentTarget, '/api/zk/publicar', 'Lista publicada.'));
+    $('zk-reiniciar').addEventListener('click', (e) => accionZk(e.currentTarget, '/api/zk/reiniciar', 'Canjes de la promo reiniciados.'));
     cargar();
   }
 
   function esqueletos() {
-    for (const id of ['saldos', 'liquidacion', 'reglas']) {
+    for (const id of ['saldos', 'liquidacion', 'reglas', 'promo-zk']) {
       $(id).innerHTML = '<li><div class="esqueleto" style="height:40px;flex:1"></div></li>';
     }
   }
@@ -86,7 +106,10 @@
   async function cargar() {
     esqueletos();
     try {
-      const [resumen, emision] = await Promise.all([UP.api('/api/universidad/resumen'), UP.api('/api/emision')]);
+      const [resumen, emision, promo] = await Promise.all([
+        UP.api('/api/universidad/resumen'), UP.api('/api/emision'), UP.api('/api/zk/promo'),
+      ]);
+      pintarPromoZk(promo);
       pintarSaldos(resumen.estudiantes);
       pintarLiquidacion(resumen.comercios);
       pintarReglas(emision);
@@ -130,6 +153,38 @@
     $('reglas').innerHTML = filas.map(([icono, titulo, valor]) => `
       <li><span class="icono">${icono}</span><div class="texto"><strong>${titulo}</strong><small>${valor}</small></div></li>`).join('')
       + `<li><span class="icono">🔎</span><div class="texto"><strong>Verificable por cualquiera</strong><small><a href="${e.explorador}" target="_blank" rel="noopener">Ver el mint en la cadena ↗</a></small></div></li>`;
+  }
+
+  function pintarPromoZk(p) {
+    const mes = new Date(`${p.mes}-15`).toLocaleString('es-GT', { month: 'long', year: 'numeric' });
+    const filas = p.publicada
+      ? [
+          ['☕', p.nombre, mes],
+          ['🌳', 'Raíz publicada', `<span class="num">${p.raiz.slice(0, 8)}…${p.raiz.slice(-6)}</span>`],
+          ['🎓', 'Estudiantes que califican', `${p.elegibles} (la lista es privada)`],
+          ['🕶️', 'Canjes verificados', `${p.canjes} · sin saber quiénes`],
+        ]
+      : [['☕', p.nombre, `Lista de ${mes} sin publicar`]];
+    $('promo-zk').innerHTML = filas.map(([icono, titulo, valor]) => `
+      <li><span class="icono">${icono}</span><div class="texto"><strong>${UP.esc(titulo)}</strong><small>${valor}</small></div></li>`).join('');
+  }
+
+  async function accionZk(boton, url, mensaje) {
+    const original = boton.textContent;
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span>';
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'x-clave-universidad': $('clave').value } });
+      const datosR = await r.json();
+      if (!r.ok) throw new Error(datosR.error || 'No se pudo completar.');
+      pintarPromoZk(datosR);
+      UP.aviso(`✓ ${mensaje}`, 'ok');
+    } catch (error) {
+      UP.aviso(UP.esc(error.message), 'error', 6);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = original;
+    }
   }
 
   async function otorgar() {

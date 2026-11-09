@@ -1,7 +1,8 @@
 // exportar-llaves.js — Junta las llaves de keys/ en un solo archivo para el servidor.
 //
 // Genera keys/llaves.json con este formato:
-//   { "universidad": [...], "estudiantes/ana": [...], "comercios/cafe-campus": [...] }
+//   { "universidad": [...], "estudiantes/ana": [...], "comercios/cafe-campus": [...],
+//     "zk/ana": { "secreto": "..." } }
 // Ese archivo se sube a Render como "Secret File" con el nombre llaves.json.
 //
 // Contiene llaves PRIVADAS (de devnet). Queda dentro de keys/, que git ignora:
@@ -34,10 +35,19 @@ for (const carpeta of ['estudiantes', 'comercios']) {
   }
 }
 
+// Secretos ZK del nivel 3 (keys/zk/<estudiante>.json → "zk/<estudiante>").
+const dirZk = path.join(DIR, 'zk');
+if (fs.existsSync(dirZk)) {
+  for (const archivo of fs.readdirSync(dirZk).filter((a) => a.endsWith('.json')).sort()) {
+    paquete[`zk/${path.basename(archivo, '.json')}`] = leer(path.join(dirZk, archivo));
+  }
+}
+
 fs.writeFileSync(SALIDA, JSON.stringify(paquete), { mode: 0o600 });
 
 console.log(`Paquete creado: keys/llaves.json (${Object.keys(paquete).length} llaves)\n`);
 for (const [nombre, bytes] of Object.entries(paquete)) {
+  if (nombre.startsWith('zk/')) { console.log(`  ${nombre.padEnd(24)} (secreto ZK, no tiene dirección)`); continue; }
   const direccion = Keypair.fromSecretKey(Uint8Array.from(bytes)).publicKey.toBase58();
   console.log(`  ${nombre.padEnd(24)} ${direccion}`);
 }

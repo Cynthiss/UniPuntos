@@ -34,6 +34,14 @@
 
       <section class="seccion">
         <div class="fila-entre" style="margin-bottom:12px">
+          <h2>Promo privada</h2>
+          <span class="insignia marca">🕶️ ZK</span>
+        </div>
+        <div id="promo-zk"></div>
+      </section>
+
+      <section class="seccion">
+        <div class="fila-entre" style="margin-bottom:12px">
           <h2>Recompensas</h2>
           <small id="disponibles"></small>
         </div>
@@ -111,6 +119,7 @@
       $('wallet').textContent = `Wallet ${UP.corta(info.wallet)} · ver en la cadena ↗`;
       pintarCatalogo();
       pintarHistorial(info.historial);
+      cargarPromoZk();
     } catch (error) {
       $('saldo').innerHTML = '—<span>pts</span>';
       UP.aviso(UP.esc(error.message), 'error');
@@ -161,6 +170,57 @@
     }).join('');
   }
 
+  // ----- Promo privada (nivel 3): prueba de conocimiento cero -----
+  const nombreMes = (mes) => new Date(`${mes}-15`).toLocaleString('es-GT', { month: 'long' });
+
+  async function cargarPromoZk() {
+    const caja = $('promo-zk');
+    caja.innerHTML = '<div class="tarjeta"><div class="esqueleto" style="height:60px"></div></div>';
+    try {
+      const p = await UP.api('/api/zk/estudiantes/' + $('estudiante').value);
+      let estado, boton = '';
+      if (!p.publicada) {
+        estado = 'La universidad aún no publica la lista de este mes.';
+      } else if (p.usada) {
+        estado = '✓ Ya usaste esta promo. Cada estudiante la usa una sola vez.';
+      } else if (p.elegible) {
+        estado = `Calificas: pagaste puntual en ${nombreMes(p.mes)}. Demuéstralo sin decir quién eres.`;
+        boton = '<button class="boton chico" id="zk-generar">Generar prueba</button>';
+      } else {
+        estado = `No apareces en la lista de pagos puntuales de ${nombreMes(p.mes)}.`;
+        boton = '<button class="boton chico secundario" id="zk-intentar">Intentar igual</button>';
+      }
+      caja.innerHTML = `
+        <article class="tarjeta recompensa">
+          <div class="cuerpo">
+            <span class="icono">☕</span>
+            <div><h3>${UP.esc(p.nombre)}</h3><small>${UP.esc(nombreComercio(p.comercio))} · ${nombreMes(p.mes ?? '')}</small></div>
+          </div>
+          <p class="suave" style="font-size:.85rem;margin:0">${estado}</p>
+          ${boton ? `<div class="pie"><small class="suave">El café no sabrá quién eres</small>${boton}</div>` : ''}
+        </article>`;
+      $('zk-generar')?.addEventListener('click', (e) => generarPruebaZk(e.currentTarget, false));
+      $('zk-intentar')?.addEventListener('click', (e) => generarPruebaZk(e.currentTarget, true));
+    } catch (error) {
+      caja.innerHTML = `<div class="tarjeta vacio">${UP.esc(error.message)}</div>`;
+    }
+  }
+
+  async function generarPruebaZk(boton, intentarIgual) {
+    const original = boton.innerHTML;
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span> Generando prueba…';
+    try {
+      const r = await UP.api('/api/zk/pruebas', { method: 'POST', body: { estudiante: $('estudiante').value, intentarIgual } });
+      abrirModal({ ...r, recompensa: { nombre: r.promo.nombre, comercio: r.promo.comercio } }, { zk: true });
+    } catch (error) {
+      UP.aviso(`🚫 ${UP.esc(error.message)}`, 'error', 7);
+    } finally {
+      boton.disabled = false;
+      boton.innerHTML = original;
+    }
+  }
+
   async function pedirCodigo(boton) {
     const original = boton.innerHTML;
     boton.disabled = true;
@@ -180,11 +240,14 @@
   }
 
   // Muestra el QR y consulta cada 3 s si la caja ya confirmó el canje.
-  function abrirModal({ codigo, qr, expira, recompensa: r }) {
+  // Con { zk: true } el código lleva una prueba de conocimiento cero en vez de puntos.
+  function abrirModal({ codigo, qr, expira, recompensa: r }, { zk = false } = {}) {
     $('modal-titulo').textContent = r.nombre;
     $('qr-img').src = qr;
     $('qr-codigo').textContent = codigo;
-    $('qr-puntos').textContent = `${r.puntos} pts · ${nombreComercio(r.comercio)}`;
+    $('qr-puntos').textContent = zk
+      ? `Prueba de conocimiento cero · ${nombreComercio(r.comercio)} · no lleva tu nombre`
+      : `${r.puntos} pts · ${nombreComercio(r.comercio)}`;
     $('modal-espera').classList.remove('oculto');
     $('modal-listo').classList.add('oculto');
     $('modal').classList.remove('oculto');
@@ -202,10 +265,12 @@
 
       if (++consultas % 3 !== 0) return; // cada 3 segundos
       try {
-        const c = await UP.api('/api/codigos/' + codigo);
+        const c = await UP.api((zk ? '/api/zk/codigos/' : '/api/codigos/') + codigo);
         if (c.estado === 'usado') {
           detenerEspera();
-          $('listo-detalle').textContent = `Canjeaste ${r.nombre} por ${r.puntos} pts. Los puntos se quemaron en la cadena.`;
+          $('listo-detalle').textContent = zk
+            ? 'El café verificó que pagaste puntual sin saber quién eres. No se gastaron puntos.'
+            : `Canjeaste ${r.nombre} por ${r.puntos} pts. Los puntos se quemaron en la cadena.`;
           $('modal-espera').classList.add('oculto');
           $('modal-listo').classList.remove('oculto');
         } else if (c.estado === 'procesando') {
@@ -214,6 +279,9 @@
           $('qr-estado').textContent = 'La caja confirmó · registrando en la cadena…';
         } else if (c.estado === 'vencido') {
           detenerEspera();
+        } else if (c.estado === 'rechazado') {
+          detenerEspera();
+          $('qr-estado').textContent = `Rechazado: ${c.motivo}`;
         }
       } catch { /* se reintenta en la siguiente vuelta */ }
     }, 1000);

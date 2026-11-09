@@ -287,7 +287,19 @@ SOLANA_RPC_URL=http://127.0.0.1:8899 UNIPUNTOS_NIVEL=2 npm run inicializar-progr
 
 ## Nivel 3: canje privado con conocimiento cero (`zk/`)
 
-**Caso:** Café 2x1 solo para estudiantes que pagaron puntual este mes, **sin que el comercio sepa quién es** el estudiante. Es una demo aislada: no depende de la cadena ni de la app.
+**Caso:** Café 2x1 solo para estudiantes que pagaron puntual este mes, **sin que el comercio sepa quién es** el estudiante. No depende de la cadena: funciona desde la terminal y también dentro de la app web.
+
+### En la app web
+
+| Vista | Qué hace |
+|---|---|
+| Mis puntos | Tarjeta "Promo privada". Si el estudiante califica, **Generar prueba** crea la prueba y un código QR que no lleva su nombre. Si no califica (Bruno), **Intentar igual** muestra que el circuito rechaza la prueba. |
+| Caja | Al ingresar el código, el Café ve solo la promo y **Verificar prueba**: válida o no, y una huella anónima (nullifier). Un segundo intento del mismo estudiante se rechaza como doble canje. |
+| Universidad | Raíz publicada, cuántos califican y cuántos canjearon, sin saber quiénes. **Publicar lista del mes** y **Reiniciar demo** (piden la clave si está configurada). |
+
+El mes de la promo es el último de `pagosPuntuales` en `data/seed.json`. El servidor publica la lista al arrancar si no existe. Rutas: `/api/zk/promo`, `/api/zk/publicar`, `/api/zk/reiniciar`, `/api/zk/estudiantes/:id`, `/api/zk/pruebas`, `/api/zk/codigos/:codigo` y `/api/zk/codigos/:codigo/verificar`.
+
+En la demo la prueba se genera en el servidor, que custodia el secreto del estudiante, y el QR lleva un código que apunta a la prueba. En producción la prueba se genera en el celular y viaja completa en el QR (~1,000 caracteres). Para Render, `zk/build/` incluye en git el `.wasm`, la `.zkey` y la llave de verificación (son públicos), y `npm run exportar-llaves` agrega los secretos ZK (`zk/ana`, ...) al paquete `llaves.json`.
 
 ### Quién sabe qué
 

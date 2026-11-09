@@ -44,7 +44,8 @@
             </div>
           </div>
         </div>
-        <p class="suave" style="font-size:.85rem;margin:14px 0">🕶️ La identidad del estudiante no se muestra en caja.</p>
+        <p class="suave" style="font-size:.85rem;margin:14px 0" id="detalle-nota">🕶️ La identidad del estudiante no se muestra en caja.</p>
+        <div id="zk-resultado" class="oculto" style="margin:0 0 14px"></div>
         <button class="boton ancho" id="confirmar">Confirmar canje</button>
       </section>
     </div>
@@ -65,7 +66,7 @@
 <script src="app.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
-  let datos, codigoActual = null;
+  let datos, codigoActual = null, esZk = false; // esZk: promo privada con prueba de conocimiento cero
   const ESTADOS = {
     pendiente: ['Listo para canjear', 'ok'],
     usado: ['Ya fue usado', 'error'],
@@ -102,6 +103,7 @@
     codigoActual = null;
     $('nombre-comercio').textContent = nombreComercio();
     $('detalle').classList.add('oculto');
+    $('zk-resultado').classList.add('oculto');
   }
 
   async function buscar(codigo) {
@@ -109,6 +111,13 @@
     if (!codigo) return;
     $('buscar').disabled = true;
     try {
+      // Primero se busca como canje de puntos; si no existe, como promo privada (ZK).
+      const zk = await UP.api('/api/zk/codigos/' + encodeURIComponent(codigo)).catch(() => null);
+      $('zk-resultado').classList.add('oculto');
+      if (zk) return mostrarZk(codigo, zk);
+      esZk = false;
+      $('detalle-nota').textContent = '🕶️ La identidad del estudiante no se muestra en caja.';
+      $('confirmar').textContent = 'Confirmar canje';
       const c = await UP.api('/api/codigos/' + encodeURIComponent(codigo));
       const deEsteComercio = c.recompensa.comercio === $('comercio').value;
       const [texto, tipo] = deEsteComercio ? ESTADOS[c.estado] : ['De otro comercio', 'error'];
@@ -128,7 +137,56 @@
     }
   }
 
+  const ESTADOS_ZK = {
+    pendiente: ['Prueba lista para verificar', 'ok'],
+    verificando: ['Verificando…', ''],
+    usado: ['Ya fue usada', 'error'],
+    rechazado: ['Rechazada', 'error'],
+    vencido: ['Vencido', 'error'],
+  };
+
+  // Código de la promo privada: la caja solo ve la promo, nunca quién es.
+  function mostrarZk(codigo, c) {
+    esZk = true;
+    codigoActual = codigo;
+    const deEsteComercio = c.promo.comercio === $('comercio').value;
+    const [texto, tipo] = deEsteComercio ? ESTADOS_ZK[c.estado] : ['De otro comercio', 'error'];
+    $('detalle-icono').textContent = '☕';
+    $('detalle-nombre').textContent = c.promo.nombre;
+    $('detalle-puntos').textContent = '🕶️ Prueba ZK · 0 pts';
+    $('detalle-estado').textContent = texto;
+    $('detalle-estado').className = `insignia ${tipo}`;
+    $('detalle-nota').textContent = 'El código trae una prueba de conocimiento cero: demuestra que el estudiante pagó puntual sin revelar quién es. No se gastan puntos.';
+    $('confirmar').textContent = 'Verificar prueba';
+    $('confirmar').disabled = c.estado !== 'pendiente' || !deEsteComercio;
+    $('detalle').classList.remove('oculto');
+  }
+
+  async function verificarZk() {
+    const boton = $('confirmar');
+    boton.disabled = true;
+    boton.innerHTML = '<span class="girando"></span> Verificando prueba…';
+    try {
+      const r = await UP.api(`/api/zk/codigos/${codigoActual}/verificar`, { method: 'POST', body: { comercio: $('comercio').value } });
+      const caja = $('zk-resultado');
+      caja.className = 'tarjeta';
+      caja.style.background = r.ok ? 'var(--ok-suave, #e3f3ea)' : 'var(--error-suave, #fbe4e1)';
+      caja.innerHTML = r.ok
+        ? `<strong>✓ Prueba válida (${r.ms} ms)</strong><br><small>El estudiante pagó puntual. No sabemos quién es.<br>Huella anónima: <span class="num">${r.nullifierHash.slice(0, 6)}…${r.nullifierHash.slice(-4)}</span></small>`
+        : `<strong>✗ Rechazada</strong><br><small>${UP.esc(r.motivo)}</small>`;
+      $('detalle-estado').textContent = r.ok ? 'Promo aplicada' : 'Rechazada';
+      $('detalle-estado').className = `insignia ${r.ok ? 'ok' : 'error'}`;
+      UP.aviso(r.ok ? '✓ Aplica el 2x1.' : `✗ ${UP.esc(r.motivo)}`, r.ok ? 'ok' : 'error', 6);
+    } catch (error) {
+      boton.disabled = false;
+      UP.aviso(UP.esc(error.message), 'error');
+    } finally {
+      boton.textContent = 'Verificar prueba';
+    }
+  }
+
   async function confirmar() {
+    if (esZk) return verificarZk();
     const boton = $('confirmar');
     boton.disabled = true;
     boton.innerHTML = '<span class="girando"></span> Registrando en la cadena…';
